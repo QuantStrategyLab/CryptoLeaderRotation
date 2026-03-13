@@ -1,0 +1,136 @@
+from __future__ import annotations
+
+from typing import Any, Iterable, Mapping, Optional
+
+import numpy as np
+import pandas as pd
+
+from .utils import make_schedule
+
+
+def compute_performance_metrics(
+    returns: pd.Series,
+    turnover: Optional[pd.Series] = None,
+    periods_per_year: int = 365,
+) -> dict[str, float]:
+    """Compute daily strategy performance metrics from a return series."""
+    returns = returns.dropna()
+    if returns.empty:
+        return {
+            "CAGR": np.nan,
+            "Annualized Volatility": np.nan,
+            "Sharpe": np.nan,
+            "Sortino": np.nan,
+            "Max Drawdown": np.nan,
+            "Calmar": np.nan,
+            "Win Rate": np.nan,
+            "Turnover": np.nan,
+        }
+
+    equity = (1.0 + returns).cumprod()
+    total_days = len(returns)
+    cagr = float(equity.iloc[-1] ** (periods_per_year / total_days) - 1.0)
+    ann_vol = float(returns.std(ddof=0) * np.sqrt(periods_per_year))
+    ann_return = float(returns.mean() * periods_per_year)
+    downside = returns.where(returns < 0.0, 0.0)
+    downside_vol = float(downside.std(ddof=0) * np.sqrt(periods_per_year))
+    sharpe = ann_return / ann_vol if ann_vol > 0.0 else np.nan
+    sortino = ann_return / downside_vol if downside_vol > 0.0 else np.nan
+    drawdown = equity / equity.cummax() - 1.0
+    max_drawdown = float(drawdown.min())
+    calmar = cagr / abs(max_drawdown) if max_drawdown < 0.0 else np.nan
+    win_rate = float((returns > 0.0).mean())
+    turnover_value = np.nan if turnover is None else float(turnover.mean() * periods_per_year)
+    return {
+        "CAGR": cagr,
+        "Annualized Volatility": ann_vol,
+        "Sharpe": sharpe,
+        "Sortino": sortino,
+        "Max Drawdown": max_drawdown,
+        "Calmar": calmar,
+        "Win Rate": win_rate,
+        "Turnover": turnover_value,
+    }
+
+
+def evaluate_leader_selection(
+    panel: pd.DataFrame,
+    score_column: str,
+    config: dict[str, Any],
+    start_date: Optional[pd.Timestamp] = None,
+    end_date: Optional[pd.Timestamp] = None,
+    rebalance_dates: Optional[Iterable[pd.Timestamp]] = None,
+) -> dict[str, dict[str, float]]:
+    """Measure how well current rankings capture future leaders."""
+    subset = panel.copy()
+    date_index = subset.index.get_level_values("date")
+    if start_date is not None:
+        subset = subset.loc[date_index >= pd.Timestamp(start_date)]
+        date_index = subset.index.get_level_values("date")
+    if end_date is not None:
+        subset = subset.loc[date_index <= pd.Timestamp(end_date)]
+        date_index = subset.index.get_level_values("date")
+
+    if rebalance_dates is None:
+        rebalance_dates = make_schedule(
+            list(subset.index.get_level_values("date").unique().sort_values()),
+            config["strategy"]["rebalance_frequency"],
+        )
+
+    top_n = int(config["strategy"]["top_n"])
+    future_top_k = int(config["labels"]["future_top_k"])
+    horizons = [int(h) for h in config["labels"]["horizons"]]
+    results: dict[str, dict[str, float]] = {}
+
+    for horizon in horizons:
+        precision_values: list[float] = []
+        recall_values: list[float] = []
+        hit_values: list[float] = []
+        leader_capture_values: list[float] = []
+        avg_rank_values: list[float] = []
+        overlap_counts: list[int] = []
+
+        future_return_col = f"future_return_{horizon}"
+        for date in rebalance_dates:
+            if date not in subset.index.get_level_values("date"):
+                continue
+            snapshot = subset.xs(date, level="date")
+            valid = snapshot["in_universe"] & snapshot[score_column].notna() & snapshot[future_return_col].notna()
+            current = snapshot.loc[valid].copy()
+            if len(current) < max(top_n, future_top_k):
+                continue
+
+            current_top = current.sort_values(score_column, ascending=False).head(top_n).index.tolist()
+            future_top = current.sort_values(future_return_col, ascending=False).head(future_top_k).index.tolist()
+            overlap = sorted(set(current_top) & set(future_top))
+            ranks = current[score_column].rank(ascending=False, method="first")
+
+            precision_values.append(len(overlap) / top_n)
+            recall_values.append(len(overlap) / future_top_k)
+            hit_values.append(float(len(overlap) > 0))
+            leader_capture_values.append(float(future_top[0] in current_top))
+            avg_rank_values.append(float(ranks.loc[future_top].mean()))
+            overlap_counts.append(len(overlap))
+
+        results[str(horizon)] = {
+            "Precision@N": float(np.mean(precision_values)) if precision_values else np.nan,
+            "Recall@N": float(np.mean(recall_values)) if recall_values else np.nan,
+            "Overlap Hit Rate": float(np.mean(hit_values)) if hit_values else np.nan,
+            "Average Rank of Future Top Performers": float(np.mean(avg_rank_values)) if avg_rank_values else np.nan,
+            "Leader Capture Rate": float(np.mean(leader_capture_values)) if leader_capture_values else np.nan,
+            "Average Overlap Count": float(np.mean(overlap_counts)) if overlap_counts else np.nan,
+            "Evaluation Dates": float(len(precision_values)),
+        }
+
+    return results
+
+
+def leader_metrics_to_frame(metrics: Mapping[str, Mapping[str, float]]) -> pd.DataFrame:
+    """Convert nested leader metrics into a tidy dataframe."""
+    rows = []
+    for horizon, horizon_metrics in metrics.items():
+        row = {"horizon": horizon}
+        row.update(horizon_metrics)
+        rows.append(row)
+    return pd.DataFrame(rows)
+

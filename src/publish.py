@@ -1,0 +1,335 @@
+from __future__ import annotations
+
+import os
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Any
+
+import pandas as pd
+
+from .utils import read_json, write_json
+
+
+REQUIRED_OUTPUT_FILES = (
+    "latest_universe.json",
+    "latest_ranking.csv",
+    "live_pool.json",
+    "live_pool_legacy.json",
+)
+
+
+@dataclass(frozen=True)
+class PublishSettings:
+    enabled: bool
+    dry_run: bool
+    mode: str
+    gcp_project_id: str | None
+    gcs_bucket: str | None
+    gcs_root_prefix: str
+    firestore_collection: str
+    firestore_document: str
+    source_project: str
+    upload_current_pointer: bool
+
+
+@dataclass(frozen=True)
+class ReleaseArtifacts:
+    as_of_date: str
+    version: str
+    output_dir: Path
+    latest_universe_path: Path
+    latest_ranking_path: Path
+    live_pool_path: Path
+    live_pool_legacy_path: Path
+    latest_universe: dict[str, Any]
+    latest_ranking: pd.DataFrame
+    live_pool: dict[str, Any]
+    live_pool_legacy: dict[str, Any]
+
+
+def parse_bool(value: Any, default: bool = False) -> bool:
+    if value is None:
+        return bool(default)
+    if isinstance(value, bool):
+        return value
+    return str(value).strip().lower() in {"1", "true", "yes", "y", "on"}
+
+
+def build_release_version(as_of_date: str, mode: str) -> str:
+    return f"{as_of_date}-{mode}"
+
+
+def resolve_publish_settings(
+    config: dict[str, Any],
+    *,
+    mode: str | None = None,
+    dry_run: bool = False,
+    gcp_project_id: str | None = None,
+    gcs_bucket: str | None = None,
+    firestore_collection: str | None = None,
+    firestore_document: str | None = None,
+) -> PublishSettings:
+    publish_cfg = config.get("publish", {})
+    effective_mode = (
+        mode
+        or os.getenv("PUBLISH_MODE")
+        or publish_cfg.get("mode")
+        or config.get("universe", {}).get("live_mode")
+        or "core_major"
+    )
+    enabled = parse_bool(os.getenv("PUBLISH_ENABLED"), publish_cfg.get("enabled", False))
+    effective_dry_run = bool(dry_run or not enabled)
+    return PublishSettings(
+        enabled=enabled,
+        dry_run=effective_dry_run,
+        mode=str(effective_mode),
+        gcp_project_id=gcp_project_id or os.getenv("GCP_PROJECT_ID") or publish_cfg.get("gcp_project_id"),
+        gcs_bucket=gcs_bucket or os.getenv("GCS_BUCKET") or publish_cfg.get("gcs_bucket"),
+        gcs_root_prefix=str(publish_cfg.get("gcs_root_prefix", "crypto-leader-rotation")).strip("/"),
+        firestore_collection=(
+            firestore_collection
+            or os.getenv("FIRESTORE_COLLECTION")
+            or publish_cfg.get("firestore_collection", "strategy")
+        ),
+        firestore_document=(
+            firestore_document
+            or os.getenv("FIRESTORE_DOCUMENT")
+            or publish_cfg.get("firestore_document", "CRYPTO_LEADER_ROTATION_LIVE_POOL")
+        ),
+        source_project=str(publish_cfg.get("source_project", config.get("project", {}).get("name", "crypto-leader-rotation"))),
+        upload_current_pointer=parse_bool(
+            os.getenv("UPLOAD_CURRENT_POINTER"),
+            publish_cfg.get("upload_current_pointer", True),
+        ),
+    )
+
+
+def _require_file(path: Path) -> None:
+    if not path.exists():
+        raise FileNotFoundError(f"Required release artifact is missing: {path}")
+
+
+def load_release_artifacts(output_dir: Path | str, mode: str) -> ReleaseArtifacts:
+    output_path = Path(output_dir)
+    paths = {name: output_path / name for name in REQUIRED_OUTPUT_FILES}
+    for artifact_path in paths.values():
+        _require_file(artifact_path)
+
+    latest_universe = read_json(paths["latest_universe.json"])
+    live_pool = read_json(paths["live_pool.json"])
+    live_pool_legacy = read_json(paths["live_pool_legacy.json"])
+    latest_ranking = pd.read_csv(paths["latest_ranking.csv"])
+
+    as_of_values = {
+        str(latest_universe.get("as_of_date")),
+        str(live_pool.get("as_of_date")),
+        str(live_pool_legacy.get("as_of_date")),
+    }
+    if not latest_ranking.empty and "as_of_date" in latest_ranking.columns:
+        as_of_values.add(str(latest_ranking["as_of_date"].iloc[0]))
+    as_of_values.discard("None")
+    if len(as_of_values) != 1:
+        raise ValueError(f"Release artifacts have inconsistent as_of_date values: {sorted(as_of_values)}")
+    as_of_date = next(iter(as_of_values))
+
+    if not isinstance(live_pool.get("symbols"), list) or not live_pool["symbols"]:
+        raise ValueError("live_pool.json must contain a non-empty symbols list.")
+    if not isinstance(live_pool_legacy.get("symbols"), dict) or not live_pool_legacy["symbols"]:
+        raise ValueError("live_pool_legacy.json must contain a non-empty symbols mapping.")
+
+    version = build_release_version(as_of_date, mode)
+    return ReleaseArtifacts(
+        as_of_date=as_of_date,
+        version=version,
+        output_dir=output_path,
+        latest_universe_path=paths["latest_universe.json"],
+        latest_ranking_path=paths["latest_ranking.csv"],
+        live_pool_path=paths["live_pool.json"],
+        live_pool_legacy_path=paths["live_pool_legacy.json"],
+        latest_universe=latest_universe,
+        latest_ranking=latest_ranking,
+        live_pool=live_pool,
+        live_pool_legacy=live_pool_legacy,
+    )
+
+
+def build_storage_layout(settings: PublishSettings, artifacts: ReleaseArtifacts) -> dict[str, Any]:
+    if not settings.gcs_bucket:
+        bucket = "<unset-bucket>"
+    else:
+        bucket = settings.gcs_bucket
+
+    release_prefix = f"{settings.gcs_root_prefix}/releases/{artifacts.version}"
+    current_prefix = f"{settings.gcs_root_prefix}/current"
+    filenames = {
+        "latest_universe.json": artifacts.latest_universe_path,
+        "latest_ranking.csv": artifacts.latest_ranking_path,
+        "live_pool.json": artifacts.live_pool_path,
+        "live_pool_legacy.json": artifacts.live_pool_legacy_path,
+    }
+
+    objects: dict[str, dict[str, str]] = {}
+    for filename in filenames:
+        release_object = f"{release_prefix}/{filename}"
+        current_object = f"{current_prefix}/{filename}"
+        objects[filename] = {
+            "release_object": release_object,
+            "current_object": current_object,
+            "release_uri": f"gs://{bucket}/{release_object}",
+            "current_uri": f"gs://{bucket}/{current_object}",
+        }
+
+    return {
+        "release_prefix": release_prefix,
+        "current_prefix": current_prefix,
+        "storage_prefix_uri": f"gs://{bucket}/{release_prefix}",
+        "current_prefix_uri": f"gs://{bucket}/{current_prefix}",
+        "objects": objects,
+    }
+
+
+def build_firestore_payload(
+    settings: PublishSettings,
+    artifacts: ReleaseArtifacts,
+    storage_layout: dict[str, Any],
+) -> dict[str, Any]:
+    symbol_map = dict(artifacts.live_pool_legacy["symbols"])
+    symbols = list(symbol_map.keys())
+    generated_at = pd.Timestamp.utcnow().isoformat()
+    return {
+        "as_of_date": artifacts.as_of_date,
+        "mode": settings.mode,
+        "version": artifacts.version,
+        "pool_size": int(artifacts.live_pool.get("pool_size", len(symbols))),
+        "symbols": symbols,
+        "symbol_map": symbol_map,
+        "storage_prefix": storage_layout["storage_prefix_uri"],
+        "current_prefix": storage_layout["current_prefix_uri"],
+        "live_pool_legacy_uri": storage_layout["objects"]["live_pool_legacy.json"]["current_uri"],
+        "live_pool_uri": storage_layout["objects"]["live_pool.json"]["current_uri"],
+        "latest_universe_uri": storage_layout["objects"]["latest_universe.json"]["current_uri"],
+        "latest_ranking_uri": storage_layout["objects"]["latest_ranking.csv"]["current_uri"],
+        "versioned_live_pool_legacy_uri": storage_layout["objects"]["live_pool_legacy.json"]["release_uri"],
+        "generated_at": generated_at,
+        "source_project": settings.source_project,
+    }
+
+
+def build_release_manifest(
+    settings: PublishSettings,
+    artifacts: ReleaseArtifacts,
+    storage_layout: dict[str, Any],
+    firestore_payload: dict[str, Any],
+) -> dict[str, Any]:
+    return {
+        "version": artifacts.version,
+        "mode": settings.mode,
+        "dry_run": settings.dry_run,
+        "publish_enabled": settings.enabled,
+        "as_of_date": artifacts.as_of_date,
+        "release_prefix": storage_layout["release_prefix"],
+        "current_prefix": storage_layout["current_prefix"],
+        "artifacts": {
+            "latest_universe": storage_layout["objects"]["latest_universe.json"],
+            "latest_ranking": storage_layout["objects"]["latest_ranking.csv"],
+            "live_pool": storage_layout["objects"]["live_pool.json"],
+            "live_pool_legacy": storage_layout["objects"]["live_pool_legacy.json"],
+        },
+        "firestore": {
+            "collection": settings.firestore_collection,
+            "document": settings.firestore_document,
+            "payload": firestore_payload,
+        },
+    }
+
+
+def write_release_manifest(output_dir: Path | str, manifest: dict[str, Any]) -> Path:
+    manifest_path = Path(output_dir) / "release_manifest.json"
+    write_json(manifest_path, manifest)
+    return manifest_path
+
+
+def upload_release_artifacts(
+    settings: PublishSettings,
+    artifacts: ReleaseArtifacts,
+    storage_layout: dict[str, Any],
+) -> None:
+    if settings.dry_run:
+        return
+    if not settings.gcp_project_id or not settings.gcs_bucket:
+        raise ValueError("GCP_PROJECT_ID and GCS_BUCKET are required for a real publish.")
+
+    try:
+        from google.cloud import storage
+    except ModuleNotFoundError as exc:  # pragma: no cover - import guard
+        raise ModuleNotFoundError(
+            "google-cloud-storage is required for real publishing. Install requirements.txt first."
+        ) from exc
+
+    client = storage.Client(project=settings.gcp_project_id)
+    bucket = client.bucket(settings.gcs_bucket)
+    files = {
+        "latest_universe.json": artifacts.latest_universe_path,
+        "latest_ranking.csv": artifacts.latest_ranking_path,
+        "live_pool.json": artifacts.live_pool_path,
+        "live_pool_legacy.json": artifacts.live_pool_legacy_path,
+    }
+    for filename, local_path in files.items():
+        object_info = storage_layout["objects"][filename]
+        bucket.blob(object_info["release_object"]).upload_from_filename(str(local_path))
+        if settings.upload_current_pointer:
+            bucket.blob(object_info["current_object"]).upload_from_filename(str(local_path))
+
+
+def publish_firestore_summary(settings: PublishSettings, firestore_payload: dict[str, Any]) -> None:
+    if settings.dry_run:
+        return
+    if not settings.gcp_project_id:
+        raise ValueError("GCP_PROJECT_ID is required for Firestore publishing.")
+
+    try:
+        from google.cloud import firestore
+    except ModuleNotFoundError as exc:  # pragma: no cover - import guard
+        raise ModuleNotFoundError(
+            "google-cloud-firestore is required for real publishing. Install requirements.txt first."
+        ) from exc
+
+    client = firestore.Client(project=settings.gcp_project_id)
+    client.collection(settings.firestore_collection).document(settings.firestore_document).set(firestore_payload)
+
+
+def run_release_publish(
+    config: dict[str, Any],
+    *,
+    mode: str | None = None,
+    dry_run: bool = False,
+    gcp_project_id: str | None = None,
+    gcs_bucket: str | None = None,
+    firestore_collection: str | None = None,
+    firestore_document: str | None = None,
+) -> dict[str, Any]:
+    settings = resolve_publish_settings(
+        config,
+        mode=mode,
+        dry_run=dry_run,
+        gcp_project_id=gcp_project_id,
+        gcs_bucket=gcs_bucket,
+        firestore_collection=firestore_collection,
+        firestore_document=firestore_document,
+    )
+    artifacts = load_release_artifacts(config["paths"].output_dir, settings.mode)
+    storage_layout = build_storage_layout(settings, artifacts)
+    firestore_payload = build_firestore_payload(settings, artifacts, storage_layout)
+    manifest = build_release_manifest(settings, artifacts, storage_layout, firestore_payload)
+    manifest_path = write_release_manifest(artifacts.output_dir, manifest)
+
+    upload_release_artifacts(settings, artifacts, storage_layout)
+    publish_firestore_summary(settings, firestore_payload)
+
+    return {
+        "settings": settings,
+        "artifacts": artifacts,
+        "storage_layout": storage_layout,
+        "firestore_payload": firestore_payload,
+        "manifest_path": manifest_path,
+    }

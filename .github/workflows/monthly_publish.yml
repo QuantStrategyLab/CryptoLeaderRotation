@@ -1,0 +1,99 @@
+name: Monthly Publish
+
+"on":
+  schedule:
+    - cron: "15 3 1 * *"
+  workflow_dispatch:
+
+jobs:
+  monthly-publish:
+    if: github.ref_name != 'logs'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      id-token: write
+    env:
+      PUBLISH_ENABLED: ${{ vars.PUBLISH_ENABLED || 'true' }}
+      PUBLISH_MODE: ${{ vars.PUBLISH_MODE || 'core_major' }}
+      RELEASE_CHANNEL: production
+      PRODUCTION_PROFILE: binance_only_core_major_monthly
+      DOWNLOAD_TOP_LIQUID: ${{ vars.DOWNLOAD_TOP_LIQUID || '120' }}
+      FIRESTORE_COLLECTION: ${{ vars.FIRESTORE_COLLECTION || 'strategy' }}
+      FIRESTORE_DOCUMENT: ${{ vars.FIRESTORE_DOCUMENT || 'CRYPTO_LEADER_ROTATION_LIVE_POOL' }}
+      GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+      GCS_BUCKET: ${{ secrets.GCS_BUCKET }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set Up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Authenticate To Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SERVICE_ACCOUNT_KEY }}
+
+      - name: Install Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Download Or Update Raw History
+        run: python scripts/download_history.py --top-liquid "${DOWNLOAD_TOP_LIQUID}" --force-exchange-info
+
+      - name: Build Production v1 Live Pool
+        run: python scripts/build_live_pool.py --universe-mode "${PUBLISH_MODE}"
+
+      - name: Publish Production v1 Release
+        run: python scripts/publish_release.py --mode "${PUBLISH_MODE}"
+
+      - name: Write Release Heartbeat
+        if: success() && env.PUBLISH_ENABLED != 'false'
+        env:
+          GITHUB_RUN_ID: ${{ github.run_id }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          GITHUB_SERVER_URL: ${{ github.server_url }}
+        run: python scripts/write_release_heartbeat.py --manifest data/output/release_manifest.json --output-dir data/output/heartbeat
+
+      - name: Push Heartbeat To Logs Branch
+        if: success() && env.PUBLISH_ENABLED != 'false'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          LOGS_BRANCH: logs
+        run: |
+          set -euo pipefail
+          VERSION=$(python - <<'PY'
+          import json
+          print(json.load(open("data/output/release_manifest.json"))["version"])
+          PY
+          )
+          HEARTBEAT_FILE="${GITHUB_WORKSPACE}/data/output/heartbeat/monthly/${VERSION}.json"
+          TMP_DIR="$(mktemp -d)"
+          git clone --no-checkout "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" "${TMP_DIR}/logs-repo"
+          cd "${TMP_DIR}/logs-repo"
+
+          if git ls-remote --exit-code --heads origin "${LOGS_BRANCH}" >/dev/null 2>&1; then
+            git fetch origin "${LOGS_BRANCH}:${LOGS_BRANCH}"
+            git checkout "${LOGS_BRANCH}"
+          else
+            git checkout --orphan "${LOGS_BRANCH}"
+            git rm -rf . >/dev/null 2>&1 || true
+            find . -mindepth 1 -maxdepth 1 ! -name '.git' -exec rm -rf {} +
+          fi
+
+          mkdir -p monthly
+          cp "${HEARTBEAT_FILE}" "monthly/${VERSION}.json"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add "monthly/${VERSION}.json"
+          if git diff --cached --quiet; then
+            echo "No heartbeat changes to commit."
+            exit 0
+          fi
+          git commit -m "heartbeat: ${VERSION}"
+          git push origin "HEAD:${LOGS_BRANCH}"

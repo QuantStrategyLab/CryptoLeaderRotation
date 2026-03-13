@@ -1,0 +1,63 @@
+# OS / editor
+.DS_Store
+.ipynb_checkpoints/
+.idea/
+.vscode/
+
+# Python / local environments
+.venv/
+venv/
+env/
+.python-version
+__pycache__/
+*.pyc
+.coverage
+.coverage.*
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+htmlcov/
+build/
+dist/
+*.egg-info/
+
+# Local sensitive config
+.env
+.env.*
+*.env
+service-account*.json
+gcp-key*.json
+*.pem
+*.key
+
+# Local runtime data
+data/raw/*
+data/cache/*
+data/processed/*
+data/models/*
+data/reports/*
+data/output/*
+data/external/*
+
+!data/raw/.gitkeep
+!data/cache/.gitkeep
+!data/processed/.gitkeep
+!data/models/.gitkeep
+!data/reports/.gitkeep
+!data/output/.gitkeep
+!data/external/.gitkeep
+
+# Local publish dry-run artifacts
+data/output/release_manifest.json
+data/output/heartbeat/
+
+# External data local storage
+external_data/
+*.parquet
+
+# Logs / temp files
+logs/
+*.log
+.cache/
+tmp/
+temp/

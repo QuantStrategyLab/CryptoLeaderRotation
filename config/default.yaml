@@ -1,0 +1,350 @@
+project:
+  name: "crypto-leader-rotation"
+  timezone: "UTC"
+
+release:
+  channel: "production"
+  production_profile: "binance_only_core_major_monthly"
+  experimental_profile: "external_data_core_only_no_doge"
+  cadence: "monthly"
+  production_data_source: "binance_spot_only"
+  production_universe_mode: "core_major"
+
+data:
+  start_date: "2019-01-01"
+  end_date: null
+  raw_dir: "data/raw"
+  cache_dir: "data/cache"
+  processed_dir: "data/processed"
+  models_dir: "data/models"
+  reports_dir: "data/reports"
+  output_dir: "data/output"
+  benchmark_symbol: "BTCUSDT"
+
+binance:
+  base_url: "https://api.binance.com"
+  timeout_seconds: 30
+  kline_limit: 1000
+  exchange_info_cache_ttl_hours: 6
+  requests_sleep_seconds: 0.15
+
+universe:
+  research_mode: "broad_liquid"
+  live_mode: "core_major"
+  download_mode: "broad_liquid"
+  refresh_frequency: "monthly"
+  allowed_quote_assets:
+    - "USDT"
+  include_benchmark_symbols:
+    - "BTCUSDT"
+  exclude_base_assets:
+    - "BTC"
+    - "BNB"
+    - "USDC"
+    - "FDUSD"
+    - "TUSD"
+    - "USDP"
+    - "DAI"
+    - "PAX"
+    - "BUSD"
+    - "USTC"
+  exclude_symbols: []
+  exclude_suffix_keywords:
+    - "UP"
+    - "DOWN"
+    - "BULL"
+    - "BEAR"
+  high_noise_base_assets:
+    - "BANANAS31"
+    - "BONK"
+    - "NEIRO"
+    - "PEPE"
+    - "PENGU"
+    - "PUMP"
+    - "TRUMP"
+    - "TURBO"
+    - "WIF"
+    - "WLFI"
+  high_noise_symbols: []
+  modes:
+    broad_liquid:
+      min_history_days: 365
+      min_avg_quote_vol_30: 3000000
+      min_avg_quote_vol_90: 5000000
+      min_avg_quote_vol_180: 8000000
+      min_liquidity_stability: 0.35
+      min_tradable_ratio_180: 0.85
+      min_daily_quote_vol: 0
+      min_liquidity_days_90: 0
+      min_liquidity_days_180: 0
+      entry_confirmations: 1
+      exit_confirmations: 1
+      exclude_high_noise_assets: false
+      exclude_base_assets_extra: []
+      exclude_symbols_extra: []
+    core_major:
+      min_history_days: 720
+      min_avg_quote_vol_30: 8000000
+      min_avg_quote_vol_90: 12000000
+      min_avg_quote_vol_180: 18000000
+      min_liquidity_stability: 0.55
+      min_tradable_ratio_180: 0.92
+      min_daily_quote_vol: 10000000
+      min_liquidity_days_90: 70
+      min_liquidity_days_180: 145
+      entry_confirmations: 2
+      exit_confirmations: 2
+      exclude_high_noise_assets: true
+      exclude_base_assets_extra: []
+      exclude_symbols_extra: []
+
+feature_engineering:
+  atr_window: 14
+  ulcer_window: 50
+  drawdown_window: 180
+  downside_window: 60
+  beta_lookback: 60
+  correlation_lookback: 60
+  breadth_min_names: 5
+
+strategy:
+  rebalance_frequency: "weekly"
+  top_n: 3
+  weighting: "inverse_vol"
+  signal_lag_days: 1
+  execution_price: "next_open"
+  fee_bps: 10
+  slippage_bps: 5
+
+walkforward:
+  train_window_days: 720
+  test_window_days: 120
+  step_days: 60
+  min_train_dates: 360
+
+labels:
+  horizons: [30, 60, 90]
+  future_top_k: 3
+  target_mode: "blended_rank_pct"
+  blended_rank_weights:
+    "30": 0.50
+    "60": 0.35
+    "90": 0.15
+
+rules:
+  active_scheme: "balanced_leader"
+
+ensemble:
+  default_weights:
+    rule_score: 0.35
+    linear_score: 0.20
+    ml_score: 0.45
+
+regime_weights:
+  risk_off:
+    rule_score: 0.50
+    linear_score: 0.25
+    ml_score: 0.25
+  btc_dominant:
+    rule_score: 0.40
+    linear_score: 0.20
+    ml_score: 0.40
+  broad_alt_strength:
+    rule_score: 0.25
+    linear_score: 0.15
+    ml_score: 0.60
+  late_momentum:
+    rule_score: 0.35
+    linear_score: 0.15
+    ml_score: 0.50
+
+ranking_schemes:
+  relative_strength_focus:
+    rs_risk_adj: 0.35
+    trend_persist_90: 0.15
+    price_vs_sma200: 0.15
+    dist_to_90d_high: 0.10
+    liquidity_stability: 0.10
+    risk_adjusted_momentum: 0.15
+
+  balanced_leader:
+    rs_risk_adj: 0.25
+    trend_persist_90: 0.20
+    price_vs_sma200: 0.15
+    ma200_slope: 0.10
+    risk_adjusted_momentum: 0.15
+    liquidity_stability: 0.10
+    avg_quote_vol_180: 0.05
+
+  conservative_trend_quality:
+    trend_persist_90: 0.25
+    price_vs_sma200: 0.20
+    ma200_slope: 0.15
+    liquidity_stability: 0.15
+    downside_vol_penalty: 0.10
+    drawdown_penalty: 0.15
+
+model:
+  random_state: 42
+  use_lightgbm: true
+  min_train_rows: 300
+  linear_model: "ridge"
+  ridge_alpha: 2.0
+  elasticnet_alpha: 0.002
+  elasticnet_l1_ratio: 0.15
+  lightgbm_params:
+    objective: "regression"
+    n_estimators: 300
+    learning_rate: 0.05
+    num_leaves: 31
+    subsample: 0.85
+    colsample_bytree: 0.75
+    min_child_samples: 30
+    random_state: 42
+  hist_gbm_params:
+    learning_rate: 0.05
+    max_depth: 5
+    max_iter: 250
+    random_state: 42
+  random_forest_params:
+    n_estimators: 300
+    max_depth: 6
+    min_samples_leaf: 10
+    random_state: 42
+
+ranking:
+  selected_pool_size: 5
+  normalize_component_scores: true
+  confidence_min_count: 2
+
+export:
+  live_pool_size: 5
+  save_legacy_live_pool: true
+
+publish:
+  enabled: false
+  mode: "core_major"
+  gcp_project_id: null
+  gcs_bucket: null
+  gcs_root_prefix: "crypto-leader-rotation"
+  firestore_collection: "strategy"
+  firestore_document: "CRYPTO_LEADER_ROTATION_LIVE_POOL"
+  source_project: "crypto-leader-rotation"
+  upload_current_pointer: true
+
+external_data:
+  enabled: false
+  root_dir: "data/external"
+  merge_pre_binance_history: true
+  merge_cautious_symbols: false
+  use_market_cap_filter: false
+  min_market_cap_usd: null
+  max_market_cap_rank: null
+  core_backfill_whitelist:
+    - "BTCUSDT"
+    - "ETHUSDT"
+    - "XRPUSDT"
+    - "LTCUSDT"
+    - "BCHUSDT"
+    - "TRXUSDT"
+    - "ADAUSDT"
+    - "SOLUSDT"
+  cautious_backfill_whitelist:
+    - "DOGEUSDT"
+  cautious_symbol_reasons:
+    DOGEUSDT: "theme_and_sentiment_sensitive_meme_major"
+  quality_gate:
+    enabled: true
+    min_pre_binance_rows_added: 30
+    max_duplicate_dates: 0
+    max_gap_count: 5
+    max_gap_days: 7
+    min_overlap_days: 180
+    min_overlap_return_corr: 0.97
+    max_overlap_median_abs_return_diff: 0.03
+    max_overlap_close_ratio_cv: 0.05
+    abnormal_jump_threshold: 3.0
+    max_suspicious_jump_count: 10
+    max_missing_core_field_rows: 0
+    use_crosscheck_provider: true
+    min_crosscheck_overlap_days: 365
+    crosscheck_warn_return_corr: 0.92
+    crosscheck_reject_return_corr: 0.80
+    crosscheck_warn_close_ratio_cv: 0.08
+    crosscheck_reject_close_ratio_cv: 0.18
+    crosscheck_warn_median_abs_return_diff: 0.03
+    crosscheck_reject_median_abs_return_diff: 0.08
+    crosscheck_warn_gap_count: 15
+    crosscheck_reject_gap_count: 60
+  provider_priority:
+    - "binance"
+    - "alternate_exchange"
+    - "pre_binance"
+    - "exchange_archive_crosscheck"
+  providers:
+    cryptocompare_pre_binance:
+      enabled: false
+      type: "cryptocompare_daily_history"
+      source_name: "pre_binance"
+      merge_role: "pre_binance_history"
+      cache_dir: "data/external/cryptocompare_pre_binance"
+      base_url: "https://min-api.cryptocompare.com/data/v2/histoday"
+      quote_asset: "USD"
+      batch_limit: 2000
+      max_batches: 3
+      refresh_days: 7
+      requests_sleep_seconds: 0.25
+      timeout_seconds: 30
+      min_date: "2014-01-01"
+      api_key_env: "CRYPTOCOMPARE_API_KEY"
+      symbols:
+        - "BTCUSDT"
+        - "ETHUSDT"
+        - "XRPUSDT"
+        - "LTCUSDT"
+        - "TRXUSDT"
+        - "SOLUSDT"
+        - "BCHUSDT"
+        - "ADAUSDT"
+        - "DOGEUSDT"
+    exchange_archive_crosscheck:
+      enabled: false
+      type: "cryptodatadownload_daily_history"
+      source_name: "exchange_archive_crosscheck"
+      merge_role: "crosscheck_history"
+      cache_dir: "data/external/exchange_archive_crosscheck"
+      refresh_days: 30
+      requests_sleep_seconds: 0.5
+      timeout_seconds: 30
+      min_date: "2014-01-01"
+      symbol_urls:
+        BTCUSDT: "https://www.cryptodatadownload.com/cdd/Bitstamp_BTCUSD_d.csv"
+        ETHUSDT: "https://www.cryptodatadownload.com/cdd/Bitstamp_ETHUSD_d.csv"
+        XRPUSDT: "https://www.cryptodatadownload.com/cdd/Bitstamp_XRPUSD_d.csv"
+        LTCUSDT: "https://www.cryptodatadownload.com/cdd/Bitstamp_LTCUSD_d.csv"
+        BCHUSDT: "https://www.cryptodatadownload.com/cdd/Bitstamp_BCHUSD_d.csv"
+        TRXUSDT: "https://www.cryptodatadownload.com/cdd/Bitfinex_TRXUSD_d.csv"
+        ADAUSDT: "https://www.cryptodatadownload.com/cdd/Bitfinex_ADAUSD_d.csv"
+        DOGEUSDT: "https://www.cryptodatadownload.com/cdd/Bitstamp_DOGEUSD_d.csv"
+        SOLUSDT: "https://www.cryptodatadownload.com/cdd/Bitfinex_SOLUSD_d.csv"
+    pre_binance_local:
+      enabled: false
+      type: "local_csv_history"
+      source_name: "pre_binance"
+      merge_role: "pre_binance_history"
+      directory: "data/external/pre_binance"
+    alternate_exchange_local:
+      enabled: false
+      type: "local_csv_history"
+      source_name: "alternate_exchange"
+      merge_role: "alternate_exchange_history"
+      directory: "data/external/alternate_exchange"
+    market_cap_local:
+      enabled: false
+      type: "local_csv_metadata"
+      source_name: "market_cap"
+      merge_role: "market_cap_metadata"
+      path: "data/external/market_cap/market_cap_snapshot.csv"
+
+plots:
+  style: "seaborn-v0_8-darkgrid"
