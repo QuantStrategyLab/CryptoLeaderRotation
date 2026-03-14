@@ -370,6 +370,11 @@ Canonical outputs:
   - `data/output/shadow_candidate_tracks/challenger_topk_60/release_index.csv`
   - `data/output/monthly_shadow_build_summary.json`
 
+Downstream handoff:
+
+- `data/output/monthly_shadow_build_summary.json` is the canonical compact summary for downstream monthly shadow-monitor and AI-briefing workflows
+- after this upstream step, switch to BinanceQuant and run `make monthly-shadow-monitor`, then `make monthly-ai-briefing`
+
 Track identity fields to rely on:
 
 - `profile`
