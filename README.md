@@ -520,6 +520,12 @@ The default monthly publisher is Production v1:
 - `core_major`
 - `external_data.enabled = false`
 
+Operational note:
+
+- the monthly workflow is intended to run on a `self-hosted` GitHub Actions runner
+- reason: GitHub-hosted runners can be blocked by Binance with `451` responses on `api.binance.com`
+- the self-hosted runner should have stable outbound access to Binance Spot public APIs
+
 The experimental external-data track is not part of the default publish path.
 
 The monthly chain is intentionally lightweight:
