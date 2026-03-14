@@ -45,6 +45,17 @@ def build_shadow_release_history(
         if len(eligible) < pool_size:
             continue
 
+        release_regime = None
+        release_regime_confidence = np.nan
+        if "regime" in snapshot.columns:
+            regime_values = snapshot["regime"].dropna().astype(str)
+            if not regime_values.empty:
+                release_regime = regime_values.iloc[0]
+        if "regime_confidence" in snapshot.columns:
+            confidence_values = pd.to_numeric(snapshot["regime_confidence"], errors="coerce").dropna()
+            if not confidence_values.empty:
+                release_regime_confidence = float(confidence_values.iloc[0])
+
         payload, legacy_payload = build_live_pool_payload(
             ranking_snapshot=eligible,
             metadata=metadata,
@@ -78,6 +89,8 @@ def build_shadow_release_history(
             "source_project": payload["source_project"],
             "pool_size": payload["pool_size"],
             "symbols": symbols,
+            "regime": release_regime,
+            "regime_confidence": None if pd.isna(release_regime_confidence) else release_regime_confidence,
             "selection_meta_fields": list(selection_meta_fields or []),
             "artifacts": {
                 "live_pool": str(live_pool_path.relative_to(output_path)),
@@ -96,6 +109,8 @@ def build_shadow_release_history(
                 "source_project": payload["source_project"],
                 "pool_size": payload["pool_size"],
                 "symbols": "|".join(symbols),
+                "regime": release_regime,
+                "regime_confidence": release_regime_confidence,
                 "pool_stability": stability,
                 "pool_churn": churn,
                 "has_selection_meta": bool(payload.get("selection_meta")),

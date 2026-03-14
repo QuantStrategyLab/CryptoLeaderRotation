@@ -175,6 +175,7 @@ data/output/shadow_releases/
 - `mode`
 - `pool_size`
 - `symbols`
+- optional research diagnostics such as `regime` and `regime_confidence`
 - relative paths to the local artifact files
 
 This shadow history is additive research infrastructure. It is meant to mimic the monthly upstream artifact sequence without requiring live Firestore or GCS.

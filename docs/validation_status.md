@@ -108,6 +108,13 @@ Report locations for the hardened baseline:
 
 These report files are local generated artifacts under `data/reports/` and are not committed to git by default.
 
+Additional research-only challenger outputs, when generated:
+
+- `data/reports/challenger_experiment_summary.csv`
+- `data/reports/challenger_monthly_shadow_detail.csv`
+- `data/reports/challenger_monthly_shadow_by_year.csv`
+- `data/reports/challenger_monthly_shadow_by_regime.csv`
+
 ## Publish Chain Validation Completed
 
 Validated in-repo:

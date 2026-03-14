@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import tempfile
 import unittest
 from pathlib import Path
@@ -23,6 +24,14 @@ class ShadowReleaseHistoryTests(unittest.TestCase):
         panel["confidence"] = [
             0.7, 0.6, 0.1,
             0.4, 0.8, 0.5,
+        ]
+        panel["regime"] = [
+            "broad_alt_strength", "broad_alt_strength", "broad_alt_strength",
+            "risk_off", "risk_off", "risk_off",
+        ]
+        panel["regime_confidence"] = [
+            0.8, 0.8, 0.8,
+            0.6, 0.6, 0.6,
         ]
 
         metadata = pd.DataFrame(
@@ -55,7 +64,14 @@ class ShadowReleaseHistoryTests(unittest.TestCase):
             self.assertEqual(index_table.iloc[0]["activation_date"], "2024-02-29")
             self.assertTrue(bool(index_table.iloc[0]["has_selection_meta"]))
             self.assertEqual(index_table.iloc[0]["symbols"], "AAAUSDT|BBBUSDT")
+            self.assertEqual(index_table.iloc[0]["regime"], "broad_alt_strength")
+            self.assertAlmostEqual(float(index_table.iloc[1]["regime_confidence"]), 0.6)
             self.assertEqual(int(summary.iloc[0]["release_count"]), 2)
+
+            with (output_dir / "2024-01-31-core_major" / "release_manifest.json").open("r", encoding="utf-8") as handle:
+                manifest = json.load(handle)
+            self.assertEqual(manifest["regime"], "broad_alt_strength")
+            self.assertAlmostEqual(float(manifest["regime_confidence"]), 0.8)
 
 
 if __name__ == "__main__":

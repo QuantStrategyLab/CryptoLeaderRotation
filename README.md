@@ -254,7 +254,7 @@ The downloader:
 .venv/bin/python scripts/run_challenger_experiments.py
 ```
 
-These challenger runs are additive research tooling. They do not change the production default target or publish path unless a future review explicitly adopts them.
+These challenger runs are additive research tooling. They do not change the production default target or publish path unless a future review explicitly adopts them. The runner now also writes monthly slice summaries by calendar year and by upstream regime so challenger robustness can be checked before any shadow-production decision.
 
 ## Recommended Validation Baseline
 
@@ -312,6 +312,8 @@ Each shadow release contains:
 - `release_manifest.json`
 
 The root also contains `release_index.csv`, which downstream replay tools can use to step through historical monthly upstream artifacts with a configurable activation lag and without live Firestore/GCS dependencies.
+
+When available, each release index row also carries the upstream `regime` and `regime_confidence` for that monthly snapshot. These are research diagnostics for robustness slicing, not part of the minimum downstream contract.
 
 ## Dynamic Universe Logic
 
