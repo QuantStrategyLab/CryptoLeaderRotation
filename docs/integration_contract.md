@@ -85,6 +85,12 @@ Stable contract fields for downstream validation:
 
 Research/reporting extras are intentionally not part of the stable contract. Downstream consumers should not infer live readiness from local research CSVs or validation summaries.
 
+Optional additive research extension:
+
+- `selection_meta` may be included in local shadow-release artifacts, or in live exports if explicitly enabled
+- example fields include `final_score`, `confidence`, and `current_rank`
+- downstream should treat this as optional enrichment, not as a required contract field
+
 ## Firestore Contract
 
 Collection and document defaults:
@@ -147,6 +153,31 @@ gs://<bucket>/crypto-leader-rotation/current/latest_ranking.csv
 gs://<bucket>/crypto-leader-rotation/current/live_pool.json
 gs://<bucket>/crypto-leader-rotation/current/live_pool_legacy.json
 ```
+
+## Local Shadow Release History
+
+For end-to-end offline replay, the repository can also build a local monthly shadow release history under:
+
+```text
+data/output/shadow_releases/
+  release_index.csv
+  <YYYY-MM-DD-mode>/
+    live_pool.json
+    live_pool_legacy.json
+    release_manifest.json
+```
+
+`release_index.csv` is intended for downstream local replay and includes:
+
+- `as_of_date`
+- `activation_date`
+- `version`
+- `mode`
+- `pool_size`
+- `symbols`
+- relative paths to the local artifact files
+
+This shadow history is additive research infrastructure. It is meant to mimic the monthly upstream artifact sequence without requiring live Firestore or GCS.
 
 ## Recommended Downstream Read Priority
 

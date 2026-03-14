@@ -394,6 +394,11 @@ def build_live_pool_outputs(
         pool_size=int(config["export"]["live_pool_size"]),
         mode=str(resolved_mode),
         source_project=str(config.get("publish", {}).get("source_project", config.get("project", {}).get("name", "crypto-leader-rotation"))),
+        selection_meta_fields=(
+            list(config["export"].get("selection_meta_fields", []))
+            if config["export"].get("include_selection_meta", False)
+            else None
+        ),
         save_legacy=bool(config["export"]["save_legacy_live_pool"]),
     )
     logger.info("Live pool exports saved into %s for %s.", output_dir, latest_date.date())

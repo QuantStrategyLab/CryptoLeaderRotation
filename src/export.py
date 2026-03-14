@@ -39,17 +39,29 @@ def export_latest_ranking(panel: pd.DataFrame, output_dir: str | Any, as_of_date
     return exported
 
 
-def export_live_pool(
+def _serialize_payload_value(value: Any) -> Any:
+    if isinstance(value, pd.Timestamp):
+        return date_to_str(value)
+    if pd.isna(value):
+        return None
+    if hasattr(value, "item"):
+        try:
+            return value.item()
+        except Exception:
+            return value
+    return value
+
+
+def build_live_pool_payload(
     ranking_snapshot: pd.DataFrame,
     metadata: pd.DataFrame,
-    output_dir: str | Any,
     as_of_date: pd.Timestamp,
     pool_size: int,
     mode: str = "core_major",
     source_project: str = "crypto-leader-rotation",
-    save_legacy: bool = True,
-) -> dict[str, Any]:
-    """Export the latest live pool in both simple and legacy-compatible forms."""
+    selection_meta_fields: list[str] | None = None,
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    """Build additive live-pool payloads without performing I/O."""
     selected = ranking_snapshot.sort_values("final_score", ascending=False).head(pool_size).copy()
     symbols = selected.index.tolist()
     metadata_indexed = metadata.set_index("symbol")
@@ -60,6 +72,7 @@ def export_live_pool(
         for symbol in symbols
         if symbol in metadata_indexed.index
     }
+
     payload = {
         "as_of_date": as_of_date_str,
         "version": version,
@@ -69,17 +82,60 @@ def export_live_pool(
         "symbol_map": symbol_map,
         "source_project": str(source_project),
     }
+    legacy_payload = {
+        "as_of_date": as_of_date_str,
+        "version": version,
+        "mode": str(mode),
+        "pool_size": len(symbols),
+        "symbols": symbol_map,
+        "symbol_map": symbol_map,
+        "source_project": str(source_project),
+    }
+
+    if selection_meta_fields:
+        available_fields = [field for field in selection_meta_fields if field in selected.columns]
+        selection_meta = {}
+        for symbol in symbols:
+            if symbol not in selected.index:
+                continue
+            meta = {}
+            for field in available_fields:
+                value = _serialize_payload_value(selected.loc[symbol, field])
+                if value is None:
+                    continue
+                meta[field] = value
+            if meta:
+                selection_meta[symbol] = meta
+        if selection_meta:
+            payload["selection_meta"] = selection_meta
+            legacy_payload["selection_meta"] = selection_meta
+
+    return payload, legacy_payload
+
+
+def export_live_pool(
+    ranking_snapshot: pd.DataFrame,
+    metadata: pd.DataFrame,
+    output_dir: str | Any,
+    as_of_date: pd.Timestamp,
+    pool_size: int,
+    mode: str = "core_major",
+    source_project: str = "crypto-leader-rotation",
+    selection_meta_fields: list[str] | None = None,
+    save_legacy: bool = True,
+) -> dict[str, Any]:
+    """Export the latest live pool in both simple and legacy-compatible forms."""
+    payload, legacy_payload = build_live_pool_payload(
+        ranking_snapshot=ranking_snapshot,
+        metadata=metadata,
+        as_of_date=as_of_date,
+        pool_size=pool_size,
+        mode=mode,
+        source_project=source_project,
+        selection_meta_fields=selection_meta_fields,
+    )
     write_json(output_dir / "live_pool.json", payload)
 
     if save_legacy:
-        legacy_payload = {
-            "as_of_date": as_of_date_str,
-            "version": version,
-            "mode": str(mode),
-            "pool_size": len(symbols),
-            "symbols": symbol_map,
-            "symbol_map": symbol_map,
-            "source_project": str(source_project),
-        }
         write_json(output_dir / "live_pool_legacy.json", legacy_payload)
     return payload

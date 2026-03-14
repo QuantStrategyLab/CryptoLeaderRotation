@@ -222,6 +222,21 @@ ranking:
 export:
   live_pool_size: 5
   save_legacy_live_pool: true
+  include_selection_meta: false
+  selection_meta_fields:
+    - "final_score"
+    - "confidence"
+    - "current_rank"
+
+shadow_replay:
+  releases_dir: "data/output/shadow_releases"
+  cadence: "monthly"
+  activation_lag_days: 1
+  include_selection_meta: true
+  selection_meta_fields:
+    - "final_score"
+    - "confidence"
+    - "current_rank"
 
 live_build:
   prefilter_enabled: true

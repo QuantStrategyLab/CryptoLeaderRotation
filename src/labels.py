@@ -63,4 +63,6 @@ def build_training_target(panel: pd.DataFrame, config: dict[str, Any]) -> pd.Ser
         return panel[target_mode]
     if target_mode.startswith("future_return_"):
         return panel[target_mode]
+    if target_mode.startswith("future_topk_label_"):
+        return panel[target_mode]
     raise ValueError(f"Unsupported target_mode: {target_mode}")

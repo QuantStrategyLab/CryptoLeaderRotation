@@ -242,6 +242,20 @@ The downloader:
 .venv/bin/python scripts/debug_single_date_snapshot.py 2024-03-31
 ```
 
+7. Build a local monthly shadow release history for downstream replay
+
+```bash
+.venv/bin/python scripts/build_shadow_release_history.py --include-selection-meta
+```
+
+8. Run small target-mode challenger experiments (research-only)
+
+```bash
+.venv/bin/python scripts/run_challenger_experiments.py
+```
+
+These challenger runs are additive research tooling. They do not change the production default target or publish path unless a future review explicitly adopts them.
+
 ## Recommended Validation Baseline
 
 The recommended research baseline is now:
@@ -273,6 +287,12 @@ Downstream consumers should rely on these core fields in `data/output/live_pool.
 
 Publish-time pointer fields such as `storage_prefix`, `current_prefix`, `live_pool_uri`, `live_pool_legacy_uri`, `latest_universe_uri`, and `latest_ranking_uri` are stable when present in the published Firestore payload, but they are release/distribution metadata rather than research features.
 
+Optional additive research extensions:
+
+- `selection_meta` may be present in shadow-release artifacts or in live exports if explicitly enabled
+- these fields are useful for downstream replay experiments such as mild sizing tilts
+- they are not part of the minimum stable contract and should be treated as optional
+
 Freshness guidance:
 
 - production v1 publishes a monthly `core_major` pool
@@ -280,6 +300,18 @@ Freshness guidance:
 - stale or invalid upstream data should be handled as a degraded state, not treated as equivalent to a healthy fresh publish
 
 See `docs/integration_contract.md` for the full contract and fallback semantics.
+
+## Shadow Replay Support
+
+For end-to-end local replay, this repository can now build a versioned monthly shadow release history under `data/output/shadow_releases/`.
+
+Each shadow release contains:
+
+- `live_pool.json`
+- `live_pool_legacy.json`
+- `release_manifest.json`
+
+The root also contains `release_index.csv`, which downstream replay tools can use to step through historical monthly upstream artifacts with a configurable activation lag and without live Firestore/GCS dependencies.
 
 ## Dynamic Universe Logic
 

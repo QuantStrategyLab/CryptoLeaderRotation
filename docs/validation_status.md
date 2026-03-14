@@ -104,6 +104,7 @@ Report locations for the hardened baseline:
 - `data/reports/walkforward_validation_summary.csv`
 - `data/reports/monthly_live_pool_shadow_detail.csv`
 - `data/reports/monthly_live_pool_shadow_summary.csv`
+- `data/output/shadow_releases/release_index.csv` for local downstream shadow replay when generated
 
 These report files are local generated artifacts under `data/reports/` and are not committed to git by default.
 
