@@ -224,8 +224,8 @@ export:
 live_build:
   prefilter_enabled: true
   include_previous_live_pool: true
-  min_candidate_count: 20
-  max_candidate_count: 30
+  min_candidate_count: 15
+  max_candidate_count: 24
   history_ratio: 0.90
   volume_ratio: 0.80
   liquidity_stability_ratio: 0.90

@@ -20,7 +20,7 @@ jobs:
       PUBLISH_MODE: ${{ vars.PUBLISH_MODE || 'core_major' }}
       RELEASE_CHANNEL: production
       PRODUCTION_PROFILE: binance_only_core_major_monthly
-      DOWNLOAD_TOP_LIQUID: ${{ vars.DOWNLOAD_TOP_LIQUID || '120' }}
+      DOWNLOAD_TOP_LIQUID: ${{ vars.DOWNLOAD_TOP_LIQUID || '90' }}
       FIRESTORE_COLLECTION: ${{ vars.FIRESTORE_COLLECTION || 'strategy' }}
       FIRESTORE_DOCUMENT: ${{ vars.FIRESTORE_DOCUMENT || 'CRYPTO_LEADER_ROTATION_LIVE_POOL' }}
       GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}

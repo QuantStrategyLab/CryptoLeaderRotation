@@ -674,7 +674,7 @@ gh secret set GCS_BUCKET --body "your-release-bucket"
 
 gh variable set PUBLISH_ENABLED --body "true"
 gh variable set PUBLISH_MODE --body "core_major"
-gh variable set DOWNLOAD_TOP_LIQUID --body "120"
+gh variable set DOWNLOAD_TOP_LIQUID --body "90"
 gh variable set FIRESTORE_COLLECTION --body "strategy"
 gh variable set FIRESTORE_DOCUMENT --body "CRYPTO_LEADER_ROTATION_LIVE_POOL"
 ```
