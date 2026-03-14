@@ -85,6 +85,12 @@ Stable contract fields for downstream validation:
 
 Research/reporting extras are intentionally not part of the stable contract. Downstream consumers should not infer live readiness from local research CSVs or validation summaries.
 
+Optional additive research extension:
+
+- `selection_meta` may be included in local shadow-release artifacts, or in live exports if explicitly enabled
+- example fields include `final_score`, `confidence`, and `current_rank`
+- downstream should treat this as optional enrichment, not as a required contract field
+
 ## Firestore Contract
 
 Collection and document defaults:
@@ -147,6 +153,74 @@ gs://<bucket>/crypto-leader-rotation/current/latest_ranking.csv
 gs://<bucket>/crypto-leader-rotation/current/live_pool.json
 gs://<bucket>/crypto-leader-rotation/current/live_pool_legacy.json
 ```
+
+## Local Shadow Release History
+
+For end-to-end offline replay, the repository can also build a local monthly shadow release history under:
+
+```text
+data/output/shadow_releases/
+  release_index.csv
+  <YYYY-MM-DD-mode>/
+    live_pool.json
+    live_pool_legacy.json
+    release_manifest.json
+```
+
+`release_index.csv` is intended for downstream local replay and includes:
+
+- `as_of_date`
+- `activation_date`
+- `version`
+- `mode`
+- `pool_size`
+- `symbols`
+- optional research diagnostics such as `regime` and `regime_confidence`
+- relative paths to the local artifact files
+
+This shadow history is additive research infrastructure. It is meant to mimic the monthly upstream artifact sequence without requiring live Firestore or GCS.
+
+## Shadow Candidate Tracks
+
+For dual-track shadow monitoring, the repo can also build:
+
+```text
+data/output/shadow_candidate_tracks/
+  track_summary.csv
+  official_baseline/
+    release_index.csv
+    <YYYY-MM-DD-mode>/
+      live_pool.json
+      live_pool_legacy.json
+      release_manifest.json
+  challenger_topk_60/
+    release_index.csv
+    <YYYY-MM-DD-mode>/
+      live_pool.json
+      live_pool_legacy.json
+      release_manifest.json
+```
+
+Track metadata that downstream may rely on for shadow comparison:
+
+- `profile`
+- `source_track`
+- `candidate_status`
+- `version`
+- `as_of_date`
+- `activation_date`
+- `pool_size`
+- `expected_pool_size`
+
+Baseline remains the official production reference. `challenger_topk_60` is shadow-only in this workflow.
+
+Monthly operator entrypoint:
+
+```bash
+.venv/bin/python scripts/run_monthly_shadow_build.py
+```
+
+This wrapper refreshes the official baseline artifacts, runs the publish dry-run manifest check, and rebuilds the dual-track shadow candidate histories without changing the production default publish target.
 
 ## Recommended Downstream Read Priority
 

@@ -104,8 +104,20 @@ Report locations for the hardened baseline:
 - `data/reports/walkforward_validation_summary.csv`
 - `data/reports/monthly_live_pool_shadow_detail.csv`
 - `data/reports/monthly_live_pool_shadow_summary.csv`
+- `data/output/shadow_releases/release_index.csv` for local downstream shadow replay when generated
 
 These report files are local generated artifacts under `data/reports/` and are not committed to git by default.
+
+Additional shadow-candidate operator output, when generated:
+
+- `data/output/shadow_candidate_tracks/track_summary.csv`
+
+Shadow candidate status:
+
+- baseline remains the official production reference
+- `challenger_topk_60` is tracked only as a shadow-production candidate
+- shadow candidate artifacts are additive and do not replace the default live build or publish path
+- monthly operator entrypoint: `.venv/bin/python scripts/run_monthly_shadow_build.py`
 
 ## Publish Chain Validation Completed
 

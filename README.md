@@ -242,6 +242,30 @@ The downloader:
 .venv/bin/python scripts/debug_single_date_snapshot.py 2024-03-31
 ```
 
+7. Build a local monthly shadow release history for downstream replay
+
+```bash
+.venv/bin/python scripts/build_shadow_release_history.py --include-selection-meta
+```
+
+8. Build the dual-track shadow candidate release histories
+
+```bash
+.venv/bin/python scripts/build_shadow_candidate_tracks.py
+```
+
+9. Run the monthly official + shadow build wrapper
+
+```bash
+.venv/bin/python scripts/run_monthly_shadow_build.py
+```
+
+Or, with the local helper target:
+
+```bash
+make monthly-shadow-build
+```
+
 ## Recommended Validation Baseline
 
 The recommended research baseline is now:
@@ -273,6 +297,12 @@ Downstream consumers should rely on these core fields in `data/output/live_pool.
 
 Publish-time pointer fields such as `storage_prefix`, `current_prefix`, `live_pool_uri`, `live_pool_legacy_uri`, `latest_universe_uri`, and `latest_ranking_uri` are stable when present in the published Firestore payload, but they are release/distribution metadata rather than research features.
 
+Optional additive research extensions:
+
+- `selection_meta` may be present in shadow-release artifacts or in live exports if explicitly enabled
+- these fields are useful for downstream replay experiments such as mild sizing tilts
+- they are not part of the minimum stable contract and should be treated as optional
+
 Freshness guidance:
 
 - production v1 publishes a monthly `core_major` pool
@@ -280,6 +310,77 @@ Freshness guidance:
 - stale or invalid upstream data should be handled as a degraded state, not treated as equivalent to a healthy fresh publish
 
 See `docs/integration_contract.md` for the full contract and fallback semantics.
+
+## Shadow Replay Support
+
+For end-to-end local replay, this repository can now build a versioned monthly shadow release history under `data/output/shadow_releases/`.
+
+Each shadow release contains:
+
+- `live_pool.json`
+- `live_pool_legacy.json`
+- `release_manifest.json`
+
+The root also contains `release_index.csv`, which downstream replay tools can use to step through historical monthly upstream artifacts with a configurable activation lag and without live Firestore/GCS dependencies.
+
+When available, each release index row also carries the upstream `regime` and `regime_confidence` for that monthly snapshot. These are research diagnostics for robustness slicing, not part of the minimum downstream contract.
+
+## Shadow Candidate Track
+
+Baseline remains the official production reference.
+
+`challenger_topk_60` is now maintained only as an additive shadow-production candidate under `data/output/shadow_candidate_tracks/`.
+
+The current dual-track convention is:
+
+- `official_baseline`
+  - profile: `baseline_blended_rank`
+  - source track: `official_baseline`
+  - candidate status: `official_reference`
+- `challenger_topk_60`
+  - profile: `challenger_topk_60`
+  - source track: `shadow_candidate`
+  - candidate status: `shadow_candidate`
+
+These shadow candidate artifacts are versioned local release histories for downstream comparison and paper monitoring. They do not replace `data/output/live_pool.json`, do not alter the publish default, and do not imply a live switch.
+
+## Monthly Shadow Build
+
+The monthly operator workflow is now:
+
+1. build the official baseline live artifacts
+2. run the baseline publish dry-run check
+3. refresh the dual-track shadow candidate histories
+
+Canonical command:
+
+```bash
+.venv/bin/python scripts/run_monthly_shadow_build.py
+```
+
+Canonical outputs:
+
+- official baseline
+  - `data/output/live_pool.json`
+  - `data/output/live_pool_legacy.json`
+  - `data/output/release_manifest.json` from the dry-run publish check
+- shadow candidate tracks
+  - `data/output/shadow_candidate_tracks/track_summary.csv`
+  - `data/output/shadow_candidate_tracks/official_baseline/release_index.csv`
+  - `data/output/shadow_candidate_tracks/challenger_topk_60/release_index.csv`
+  - `data/output/monthly_shadow_build_summary.json`
+
+Track identity fields to rely on:
+
+- `profile`
+- `source_track`
+- `candidate_status`
+- `version`
+- `as_of_date`
+- `activation_date`
+- `expected_pool_size`
+
+Baseline remains the official production reference. `challenger_topk_60` remains shadow-only.
 
 ## Dynamic Universe Logic
 
