@@ -214,6 +214,14 @@ Track metadata that downstream may rely on for shadow comparison:
 
 Baseline remains the official production reference. `challenger_topk_60` is shadow-only in this workflow.
 
+Monthly operator entrypoint:
+
+```bash
+.venv/bin/python scripts/run_monthly_shadow_build.py
+```
+
+This wrapper refreshes the official baseline artifacts, runs the publish dry-run manifest check, and rebuilds the dual-track shadow candidate histories without changing the production default publish target.
+
 ## Recommended Downstream Read Priority
 
 1. Read Firestore `strategy/CRYPTO_LEADER_ROTATION_LIVE_POOL`

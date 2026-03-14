@@ -121,6 +121,7 @@ Shadow candidate status:
 - baseline remains the official production reference
 - `challenger_topk_60` is tracked only as a shadow-production candidate
 - shadow candidate artifacts are additive and do not replace the default live build or publish path
+- monthly operator entrypoint: `.venv/bin/python scripts/run_monthly_shadow_build.py`
 
 ## Publish Chain Validation Completed
 

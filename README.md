@@ -262,6 +262,18 @@ These challenger runs are additive research tooling. They do not change the prod
 .venv/bin/python scripts/build_shadow_candidate_tracks.py
 ```
 
+10. Run the monthly official + shadow build wrapper
+
+```bash
+.venv/bin/python scripts/run_monthly_shadow_build.py
+```
+
+Or, with the local helper target:
+
+```bash
+make monthly-shadow-build
+```
+
 ## Recommended Validation Baseline
 
 The recommended research baseline is now:
@@ -339,6 +351,44 @@ The current dual-track convention is:
   - candidate status: `shadow_candidate`
 
 These shadow candidate artifacts are versioned local release histories for downstream comparison and paper monitoring. They do not replace `data/output/live_pool.json`, do not alter the publish default, and do not imply a live switch.
+
+## Monthly Shadow Build
+
+The monthly operator workflow is now:
+
+1. build the official baseline live artifacts
+2. run the baseline publish dry-run check
+3. refresh the dual-track shadow candidate histories
+
+Canonical command:
+
+```bash
+.venv/bin/python scripts/run_monthly_shadow_build.py
+```
+
+Canonical outputs:
+
+- official baseline
+  - `data/output/live_pool.json`
+  - `data/output/live_pool_legacy.json`
+  - `data/output/release_manifest.json` from the dry-run publish check
+- shadow candidate tracks
+  - `data/output/shadow_candidate_tracks/track_summary.csv`
+  - `data/output/shadow_candidate_tracks/official_baseline/release_index.csv`
+  - `data/output/shadow_candidate_tracks/challenger_topk_60/release_index.csv`
+  - `data/output/monthly_shadow_build_summary.json`
+
+Track identity fields to rely on:
+
+- `profile`
+- `source_track`
+- `candidate_status`
+- `version`
+- `as_of_date`
+- `activation_date`
+- `expected_pool_size`
+
+Baseline remains the official production reference. `challenger_topk_60` remains shadow-only.
 
 ## Dynamic Universe Logic
 

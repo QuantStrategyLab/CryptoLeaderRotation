@@ -4,6 +4,7 @@ from __future__ import annotations
 import argparse
 import sys
 from pathlib import Path
+from typing import Any
 
 import pandas as pd
 
@@ -31,18 +32,23 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def main() -> None:
-    args = parse_args()
-    logger = get_logger("build_shadow_candidate_tracks")
-    base_config = load_config(args.config)
+def build_shadow_candidate_tracks(
+    config_path: str = "config/default.yaml",
+    *,
+    universe_mode: str | None = None,
+    root_subdir: str | None = None,
+    logger: Any | None = None,
+) -> dict[str, Any]:
+    logger = logger or get_logger("build_shadow_candidate_tracks")
+    base_config = load_config(config_path)
     shadow_cfg = base_config.get("shadow_replay", {})
     candidate_cfg = base_config.get("shadow_candidates", {})
 
-    root_subdir = args.root_subdir or str(candidate_cfg.get("root_dir", "data/output/shadow_candidate_tracks"))
-    if root_subdir.startswith("data/output/"):
-        output_root = ensure_directory(base_config["paths"].output_dir / root_subdir.replace("data/output/", "", 1))
+    resolved_root_subdir = root_subdir or str(candidate_cfg.get("root_dir", "data/output/shadow_candidate_tracks"))
+    if resolved_root_subdir.startswith("data/output/"):
+        output_root = ensure_directory(base_config["paths"].output_dir / resolved_root_subdir.replace("data/output/", "", 1))
     else:
-        output_root = ensure_directory(base_config["paths"].project_root / root_subdir)
+        output_root = ensure_directory(base_config["paths"].project_root / resolved_root_subdir)
 
     include_selection_meta = bool(candidate_cfg.get("include_selection_meta", shadow_cfg.get("include_selection_meta", True)))
     selection_meta_fields = (
@@ -60,8 +66,8 @@ def main() -> None:
         candidate_status = str(track["candidate_status"])
 
         logger.info("Building shadow track %s (%s)", track_id, target_mode)
-        config = load_config(args.config, overrides={"labels": {"target_mode": target_mode}})
-        result = run_research_pipeline(config, universe_mode=args.universe_mode)
+        config = load_config(config_path, overrides={"labels": {"target_mode": target_mode}})
+        result = run_research_pipeline(config, universe_mode=universe_mode)
         track_dir = ensure_directory(output_root / track_id)
         index_table = build_shadow_release_history(
             panel=result["panel"],
@@ -96,6 +102,21 @@ def main() -> None:
     logger.info("Shadow candidate track summary saved to %s", summary_path)
     if not summary_table.empty:
         logger.info("Track summary:\n%s", summary_table.to_string(index=False))
+
+    return {
+        "output_root": output_root,
+        "summary_path": summary_path,
+        "summary_table": summary_table,
+    }
+
+
+def main() -> None:
+    args = parse_args()
+    build_shadow_candidate_tracks(
+        config_path=args.config,
+        universe_mode=args.universe_mode,
+        root_subdir=args.root_subdir,
+    )
 
 
 if __name__ == "__main__":
