@@ -412,7 +412,35 @@ Behavior:
 - sends only a short operational summary for monthly build/publish health
 - uses existing monthly build outputs such as `monthly_shadow_build_summary.json`, `live_pool.json`, `release_manifest.json`, and `shadow_candidate_tracks/track_summary.csv`
 - skips cleanly if Telegram credentials are missing
-- never changes the monthly build behavior and is not an AI briefing channel
+- never changes the monthly build behavior and is not a review-package generator
+
+## Monthly Review Package
+
+Optional reporting-only review package:
+
+```bash
+.venv/bin/python scripts/run_monthly_review_briefing.py
+```
+
+Or:
+
+```bash
+make monthly-review-briefing
+```
+
+Outputs:
+
+- `data/output/monthly_review.md`
+- `data/output/monthly_review.json`
+- `data/output/monthly_review_prompt.md`
+
+Behavior:
+
+- uses only upstream monthly build outputs
+- summarizes official baseline release status, publish manifest status, and shadow track coverage
+- emits warnings when monthly artifacts do not align on `as_of_date`, `version`, or `mode`
+- produces a structured review prompt/checklist for manual follow-up
+- is reporting-only and does not alter monthly build behavior
 
 ## Dynamic Universe Logic
 
