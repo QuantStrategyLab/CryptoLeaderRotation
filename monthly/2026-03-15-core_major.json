@@ -1,0 +1,17 @@
+{
+  "version": "2026-03-15-core_major",
+  "as_of_date": "2026-03-15",
+  "mode": "core_major",
+  "pool_size": 5,
+  "symbols": [
+    "TRXUSDT",
+    "BCHUSDT",
+    "ETHUSDT",
+    "NEARUSDT",
+    "SOLUSDT"
+  ],
+  "storage_prefix": "gs://binancequant-crypto-leader-rotation/crypto-leader-rotation/releases/2026-03-15-core_major",
+  "generated_at": "2026-03-15T09:08:18.387784+00:00",
+  "workflow_run_id": "23107190843",
+  "workflow_run_url": "https://github.com/Pigbibi/CryptoLeaderRotation/actions/runs/23107190843"
+}
