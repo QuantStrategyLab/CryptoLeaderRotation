@@ -228,6 +228,8 @@ Require a generated manifest as part of the check:
 .venv/bin/python scripts/validate_release_contract.py --mode core_major --expected-pool-size 5 --require-manifest
 ```
 
+Operator workflow details, rollback steps, and research-vs-production boundaries are documented in `docs/operator_runbook.md`.
+
 ## Minimal Runnable Flow
 
 1. Download data
