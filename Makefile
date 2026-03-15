@@ -1,4 +1,4 @@
-.PHONY: monthly-shadow-build monthly-shadow-check monthly-build-telegram monthly-review-briefing
+.PHONY: monthly-shadow-build monthly-shadow-check monthly-build-telegram monthly-review-briefing release-status-summary
 
 monthly-shadow-build:
 	.venv/bin/python scripts/run_monthly_shadow_build.py
@@ -11,3 +11,6 @@ monthly-build-telegram:
 
 monthly-review-briefing:
 	.venv/bin/python scripts/run_monthly_review_briefing.py
+
+release-status-summary:
+	.venv/bin/python scripts/run_release_status_summary.py

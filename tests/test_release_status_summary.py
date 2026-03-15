@@ -1,0 +1,140 @@
+from __future__ import annotations
+
+import importlib.util
+import json
+import tempfile
+import unittest
+from pathlib import Path
+
+import pandas as pd
+
+
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+SCRIPT_PATH = PROJECT_ROOT / "scripts" / "run_release_status_summary.py"
+SPEC = importlib.util.spec_from_file_location("release_status_summary", SCRIPT_PATH)
+MODULE = importlib.util.module_from_spec(SPEC)
+assert SPEC is not None and SPEC.loader is not None
+SPEC.loader.exec_module(MODULE)
+
+
+def write_json(path: Path, payload: dict[str, object]) -> None:
+    path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+
+
+class ReleaseStatusSummaryTests(unittest.TestCase):
+    def write_outputs(self, root: Path, *, include_manifest: bool = True) -> Path:
+        output_dir = root / "data" / "output"
+        output_dir.mkdir(parents=True, exist_ok=True)
+        symbols = ["TRXUSDT", "ETHUSDT", "BCHUSDT", "NEARUSDT", "SOLUSDT"]
+        symbol_map = {symbol: {"base_asset": symbol[:-4]} for symbol in symbols}
+        version = "2026-03-13-core_major"
+
+        write_json(output_dir / "latest_universe.json", {"as_of_date": "2026-03-13", "symbols": symbols + ["XRPUSDT"]})
+        write_json(
+            output_dir / "live_pool.json",
+            {
+                "as_of_date": "2026-03-13",
+                "version": version,
+                "mode": "core_major",
+                "pool_size": 5,
+                "symbols": symbols,
+                "symbol_map": symbol_map,
+                "source_project": "crypto-leader-rotation",
+            },
+        )
+        write_json(
+            output_dir / "live_pool_legacy.json",
+            {
+                "as_of_date": "2026-03-13",
+                "version": version,
+                "mode": "core_major",
+                "pool_size": 5,
+                "symbols": symbol_map,
+                "symbol_map": symbol_map,
+                "source_project": "crypto-leader-rotation",
+            },
+        )
+        pd.DataFrame(
+            [
+                {
+                    "as_of_date": "2026-03-13",
+                    "symbol": symbol,
+                    "rule_score": 1.0 - index * 0.1,
+                    "linear_score": 0.9 - index * 0.1,
+                    "ml_score": 0.8 - index * 0.1,
+                    "final_score": 1.0 - index * 0.1,
+                    "regime": "risk_off",
+                    "confidence": 0.7,
+                    "selected_flag": True,
+                    "current_rank": index + 1,
+                }
+                for index, symbol in enumerate(symbols)
+            ]
+        ).to_csv(output_dir / "latest_ranking.csv", index=False)
+
+        if include_manifest:
+            write_json(
+                output_dir / "release_manifest.json",
+                {
+                    "version": version,
+                    "mode": "core_major",
+                    "dry_run": True,
+                    "publish_enabled": False,
+                    "as_of_date": "2026-03-13",
+                    "release_prefix": f"crypto-leader-rotation/releases/{version}",
+                    "current_prefix": "crypto-leader-rotation/current",
+                    "firestore": {
+                        "collection": "strategy",
+                        "document": "CRYPTO_LEADER_ROTATION_LIVE_POOL",
+                        "payload": {
+                            "as_of_date": "2026-03-13",
+                            "version": version,
+                            "mode": "core_major",
+                            "pool_size": 5,
+                            "symbols": symbols,
+                            "symbol_map": symbol_map,
+                            "source_project": "crypto-leader-rotation",
+                        },
+                    },
+                },
+            )
+        return output_dir
+
+    def test_build_release_status_payload_reports_ok_for_consistent_release(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            output_dir = self.write_outputs(Path(tmp_dir))
+            payload = MODULE.build_release_status_payload(
+                output_dir,
+                max_age_days=45,
+                require_freshness=False,
+                ranking_preview_size=3,
+            )
+            outputs = MODULE.write_outputs(payload, output_dir)
+
+            self.assertTrue(outputs["json"].exists())
+            self.assertTrue(outputs["markdown"].exists())
+
+        self.assertEqual(payload["status"], "ok")
+        self.assertEqual(payload["official_release"]["version"], "2026-03-13-core_major")
+        self.assertEqual(payload["artifact_summary"]["latest_universe_symbol_count"], 6)
+        self.assertEqual(len(payload["artifact_summary"]["ranking_preview"]), 3)
+        self.assertTrue(payload["validation"]["ok"])
+
+    def test_build_release_status_payload_reports_error_when_manifest_missing(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            output_dir = self.write_outputs(Path(tmp_dir), include_manifest=False)
+            payload = MODULE.build_release_status_payload(
+                output_dir,
+                max_age_days=45,
+                require_freshness=False,
+            )
+            markdown = MODULE.render_markdown(payload)
+
+        self.assertEqual(payload["status"], "error")
+        self.assertFalse(payload["validation"]["ok"])
+        self.assertTrue(any("release_manifest.json" in item for item in payload["validation"]["errors"]))
+        self.assertIn("## Validation", markdown)
+
+
+if __name__ == "__main__":
+    unittest.main()

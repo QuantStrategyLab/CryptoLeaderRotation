@@ -56,6 +56,9 @@ jobs:
       - name: Publish Production v1 Release
         run: python scripts/publish_release.py --mode "${PUBLISH_MODE}"
 
+      - name: Write Release Status Summary
+        run: python scripts/run_release_status_summary.py
+
       - name: Write Release Heartbeat
         if: success() && env.PUBLISH_ENABLED != 'false'
         env:

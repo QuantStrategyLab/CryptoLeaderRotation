@@ -2,13 +2,35 @@
 
 Language: English | [简体中文](README.zh-CN.md)
 
-`crypto-leader-rotation` is a research-plus-production Python project whose only job is to provide a higher-quality Binance Spot mainstream-coin universe and leader candidate pool to a separate downstream strategy script.
+`crypto-leader-rotation` is the upstream research and release system for the monthly Binance Spot leader universe.
 
-This repository does not place trades and does not contain live execution logic. Its deliverable is a stable upstream selector that can export:
+This repository does not place trades and does not contain live execution logic. Its deliverables are the validated upstream artifacts, the monthly reporting layer around those artifacts, and the publish/notification path that keeps downstream execution systems in sync.
+
+Core upstream artifacts:
 
 1. `data/output/latest_universe.json`
 2. `data/output/latest_ranking.csv`
 3. `data/output/live_pool.json`
+4. `data/output/live_pool_legacy.json`
+5. `data/output/release_manifest.json`
+6. `data/output/release_status_summary.json`
+
+## Upstream Boundary
+
+`crypto-leader-rotation` is the single upstream owner for:
+
+- research and walk-forward validation
+- monthly universe selection and live-pool publication
+- monthly release status summaries and review outputs
+- release heartbeat records and optional monthly Telegram health notifications
+
+`BinanceQuant` is a downstream execution engine. It should consume the validated live-pool contract and publish metadata, then apply freshness checks, fallback logic, execution, and risk controls. It should not become a second monthly reporting or research-summary system.
+
+In practice, that means:
+
+- upstream publishes and explains `latest_universe`, `latest_ranking`, `live_pool`, `release_manifest`, and release-status summaries
+- downstream consumes the official live-pool contract plus publish metadata and emits only runtime/execution status
+- research CSVs, shadow-track diagnostics, and monthly review outputs stay upstream and are not part of the minimum downstream execution contract
 
 ## Current Status
 
@@ -229,6 +251,14 @@ Require a generated manifest as part of the check:
 ```
 
 Operator workflow details, rollback steps, and research-vs-production boundaries are documented in `docs/operator_runbook.md`.
+
+Generate the canonical monthly release-status summary from the current official artifacts:
+
+```bash
+.venv/bin/python scripts/run_release_status_summary.py
+```
+
+This summary is the upstream publish-status view for operators. It validates the current artifact set, records release metadata, and produces `release_status_summary.json` / `release_status_summary.md` without changing any release state.
 
 Fixture-driven CLI smoke for `build_live_pool.py`:
 

@@ -11,6 +11,8 @@ Primary production outputs:
 - `data/output/live_pool.json`
 - `data/output/live_pool_legacy.json`
 - `data/output/release_manifest.json`
+- `data/output/release_status_summary.json`
+- `data/output/release_status_summary.md`
 
 Primary publish targets:
 
@@ -42,6 +44,23 @@ Rules:
 - Only `core_major` build outputs that pass contract validation should be published to downstream systems.
 - If a manual run uses `--as-of-date` for historical investigation, treat it as replay unless you intentionally publish with `--allow-stale`.
 
+## Upstream Reporting Responsibilities
+
+This repository owns the monthly reporting and publish-status summary layer for the upstream release.
+
+Operator-facing summary entrypoints:
+
+- `scripts/run_release_status_summary.py` for the canonical release-status summary built from the current official artifacts
+- `scripts/run_monthly_review_briefing.py` for the extended monthly review package when shadow-track outputs are available
+- `scripts/run_monthly_build_telegram.py` for the optional short Telegram health notification
+- `scripts/write_release_heartbeat.py` for the lightweight logs-branch heartbeat record
+
+Boundary rules:
+
+- Downstream execution systems should consume the validated release artifacts, not recreate the monthly report layer.
+- Research reports and shadow-track diagnostics stay upstream and are not part of the minimum downstream execution contract.
+- Telegram messages from this repository are operational release notifications, not trade execution alerts.
+
 ## Standard Monthly Flow
 
 1. Refresh or verify local data:
@@ -68,7 +87,13 @@ Rules:
 .venv/bin/python scripts/publish_release.py --dry-run --mode core_major
 ```
 
-5. Only after steps 1-4 pass, run the real publish path through the workflow or a controlled manual execution.
+5. Generate the canonical release-status summary:
+
+```bash
+.venv/bin/python scripts/run_release_status_summary.py
+```
+
+6. Only after steps 1-5 pass, run the real publish path through the workflow or a controlled manual execution.
 
 ## Preflight Checklist
 
@@ -169,6 +194,7 @@ Rollback note:
 
 ## Post-Release Checks
 
+- Confirm `release_status_summary.json` reports `status=ok` for the published month.
 - Confirm Firestore `strategy/CRYPTO_LEADER_ROTATION_LIVE_POOL` contains the expected `version`, `mode`, `symbols`, and `source_project`.
 - Confirm GCS current pointers and versioned objects exist for the same version.
 - Confirm downstream consumers are reading the new version without falling back to degraded sources.
