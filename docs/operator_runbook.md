@@ -13,6 +13,12 @@ Primary production outputs:
 - `data/output/release_manifest.json`
 - `data/output/release_status_summary.json`
 - `data/output/release_status_summary.md`
+- `data/output/monthly_review.json`
+- `data/output/monthly_review.md`
+- `data/output/monthly_telegram.txt`
+- `data/output/monthly_report_bundle/monthly_report_bundle.json`
+- `data/output/monthly_report_bundle/ai_review_input.md`
+- `data/output/monthly_report_bundle/job_summary.md`
 
 Primary publish targets:
 
@@ -51,8 +57,9 @@ This repository owns the monthly reporting and publish-status summary layer for 
 Operator-facing summary entrypoints:
 
 - `scripts/run_release_status_summary.py` for the canonical release-status summary built from the current official artifacts
-- `scripts/run_monthly_review_briefing.py` for the extended monthly review package when shadow-track outputs are available
-- `scripts/run_monthly_build_telegram.py` for the optional short Telegram health notification
+- `scripts/run_monthly_review_briefing.py` for the monthly review package; it can run on official release artifacts alone and adds shadow coverage when available
+- `scripts/run_monthly_build_telegram.py` for the optional short Telegram health notification or local preview text
+- `scripts/run_monthly_report_bundle.py` for the standard monthly report bundle used by Actions artifacts and AI review handoff
 - `scripts/write_release_heartbeat.py` for the lightweight logs-branch heartbeat record
 
 Boundary rules:
@@ -93,7 +100,25 @@ Boundary rules:
 .venv/bin/python scripts/run_release_status_summary.py
 ```
 
-6. Only after steps 1-5 pass, run the real publish path through the workflow or a controlled manual execution.
+6. Generate the monthly review package:
+
+```bash
+.venv/bin/python scripts/run_monthly_review_briefing.py
+```
+
+7. Render the Telegram preview text without sending:
+
+```bash
+.venv/bin/python scripts/run_monthly_build_telegram.py --print-only --output-path data/output/monthly_telegram.txt
+```
+
+8. Assemble the monthly report bundle:
+
+```bash
+.venv/bin/python scripts/run_monthly_report_bundle.py
+```
+
+9. Only after steps 1-8 pass, run the real publish path through the workflow or a controlled manual execution.
 
 ## Preflight Checklist
 
@@ -195,6 +220,8 @@ Rollback note:
 ## Post-Release Checks
 
 - Confirm `release_status_summary.json` reports `status=ok` for the published month.
+- Confirm `data/output/monthly_report_bundle/job_summary.md` matches the released month and includes the expected bundle file list.
+- Confirm the Actions run uploaded a `monthly-report-<as_of_date>` artifact for download.
 - Confirm Firestore `strategy/CRYPTO_LEADER_ROTATION_LIVE_POOL` contains the expected `version`, `mode`, `symbols`, and `source_project`.
 - Confirm GCS current pointers and versioned objects exist for the same version.
 - Confirm downstream consumers are reading the new version without falling back to degraded sources.

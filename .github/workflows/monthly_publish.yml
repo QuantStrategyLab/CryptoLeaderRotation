@@ -59,6 +59,34 @@ jobs:
       - name: Write Release Status Summary
         run: python scripts/run_release_status_summary.py
 
+      - name: Write Monthly Review Briefing
+        run: python scripts/run_monthly_review_briefing.py
+
+      - name: Write Monthly Telegram Preview
+        run: python scripts/run_monthly_build_telegram.py --print-only --output-path data/output/monthly_telegram.txt
+
+      - name: Assemble Monthly Report Bundle
+        id: monthly-report
+        run: |
+          set -euo pipefail
+          python scripts/run_monthly_report_bundle.py
+          python - <<'PY' >> "$GITHUB_OUTPUT"
+          import json
+          with open("data/output/monthly_report_bundle/monthly_report_bundle.json", "r", encoding="utf-8") as handle:
+              payload = json.load(handle)
+          print(f"artifact_name={payload['artifact_name']}")
+          PY
+
+      - name: Append Monthly Report Job Summary
+        run: cat data/output/monthly_report_bundle/job_summary.md >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload Monthly Report Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.monthly-report.outputs.artifact_name }}
+          path: data/output/monthly_report_bundle
+          if-no-files-found: error
+
       - name: Write Release Heartbeat
         if: success() && env.PUBLISH_ENABLED != 'false'
         env:

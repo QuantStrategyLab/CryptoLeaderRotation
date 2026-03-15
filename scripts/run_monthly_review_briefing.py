@@ -32,6 +32,12 @@ def load_json(path: Path) -> dict[str, Any]:
         return json.load(handle)
 
 
+def load_optional_json(path: Path) -> dict[str, Any] | None:
+    if not path.exists():
+        return None
+    return load_json(path)
+
+
 def load_track_summary(path: Path) -> list[dict[str, str]]:
     if not path.exists():
         raise FileNotFoundError(str(path))
@@ -43,6 +49,14 @@ def load_track_summary(path: Path) -> list[dict[str, str]]:
     return rows
 
 
+def load_optional_track_summary(path: Path) -> list[dict[str, str]]:
+    if not path.exists():
+        return []
+    with path.open("r", encoding="utf-8", newline="") as handle:
+        reader = csv.DictReader(handle)
+        return list(reader)
+
+
 def _safe_int(value: Any, default: int = 0) -> int:
     try:
         return int(value)
@@ -50,35 +64,58 @@ def _safe_int(value: Any, default: int = 0) -> int:
         return default
 
 
+def resolve_as_of_date(
+    summary: dict[str, Any],
+    release_status_summary: dict[str, Any],
+    live_pool: dict[str, Any],
+) -> str:
+    return str(
+        summary.get(
+            "as_of_date",
+            release_status_summary.get("official_release", {}).get("as_of_date", live_pool.get("as_of_date", "")),
+        )
+    ).strip()
+
+
 def build_review_inputs(output_dir: Path | str) -> dict[str, Any]:
     root = Path(output_dir)
     summary_path = root / "monthly_shadow_build_summary.json"
+    release_status_summary_path = root / "release_status_summary.json"
     live_pool_path = root / "live_pool.json"
     manifest_path = root / "release_manifest.json"
     track_summary_path = root / "shadow_candidate_tracks" / "track_summary.csv"
 
     return {
-        "summary": load_json(summary_path),
+        "summary": load_optional_json(summary_path),
+        "release_status_summary": load_optional_json(release_status_summary_path),
         "live_pool": load_json(live_pool_path),
         "manifest": load_json(manifest_path),
-        "track_rows": load_track_summary(track_summary_path),
+        "track_rows": load_optional_track_summary(track_summary_path),
         "paths": {
             "monthly_shadow_build_summary": str(summary_path),
+            "release_status_summary": str(release_status_summary_path),
             "live_pool": str(live_pool_path),
             "release_manifest": str(manifest_path),
             "track_summary": str(track_summary_path),
+        },
+        "availability": {
+            "monthly_shadow_build_summary": summary_path.exists(),
+            "release_status_summary": release_status_summary_path.exists(),
+            "track_summary": track_summary_path.exists(),
         },
     }
 
 
 def derive_warnings(inputs: dict[str, Any]) -> list[str]:
-    summary = inputs["summary"]
+    summary = inputs["summary"] or {}
+    release_status_summary = inputs["release_status_summary"] or {}
     live_pool = inputs["live_pool"]
     manifest = inputs["manifest"]
     track_rows = inputs["track_rows"]
+    availability = inputs["availability"]
 
     warnings: list[str] = []
-    as_of_date = str(summary.get("as_of_date", live_pool.get("as_of_date", ""))).strip()
+    as_of_date = resolve_as_of_date(summary, release_status_summary, live_pool)
     version = str(live_pool.get("version", "")).strip()
     mode = str(live_pool.get("mode", "")).strip()
 
@@ -96,19 +133,31 @@ def derive_warnings(inputs: dict[str, Any]) -> list[str]:
     if str(manifest.get("mode", "")).strip() != mode:
         warnings.append("release_manifest mode does not match live_pool mode")
 
-    track_map = {row.get("track_id", ""): row for row in track_rows}
-    for track_id in ("official_baseline", "challenger_topk_60"):
-        row = track_map.get(track_id)
-        if row is None:
-            warnings.append(f"missing track summary row for {track_id}")
-            continue
-        if str(row.get("last_as_of_date", "")).strip() != as_of_date:
-            warnings.append(f"{track_id} last_as_of_date does not match monthly summary")
+    if availability["monthly_shadow_build_summary"] and not availability["track_summary"]:
+        warnings.append("monthly shadow summary exists but track_summary.csv is missing")
+    if availability["track_summary"] and not availability["monthly_shadow_build_summary"]:
+        warnings.append("track_summary.csv exists but monthly_shadow_build_summary.json is missing")
+
+    if track_rows:
+        track_map = {row.get("track_id", ""): row for row in track_rows}
+        for track_id in ("official_baseline", "challenger_topk_60"):
+            row = track_map.get(track_id)
+            if row is None:
+                warnings.append(f"missing track summary row for {track_id}")
+                continue
+            if str(row.get("last_as_of_date", "")).strip() != as_of_date:
+                warnings.append(f"{track_id} last_as_of_date does not match monthly summary")
 
     if not live_pool.get("symbols"):
         warnings.append("live_pool symbols are empty")
     if _safe_int(live_pool.get("pool_size")) != len(live_pool.get("symbols", [])):
         warnings.append("live_pool pool_size does not match symbols length")
+
+    validation = release_status_summary.get("validation", {})
+    for item in validation.get("errors", []):
+        warnings.append(f"release_status_summary error: {item}")
+    for item in validation.get("warnings", []):
+        warnings.append(f"release_status_summary warning: {item}")
 
     return warnings
 
@@ -116,14 +165,15 @@ def derive_warnings(inputs: dict[str, Any]) -> list[str]:
 def build_review_questions() -> list[str]:
     return [
         "Does the official baseline publish chain look internally consistent for this month?",
-        "Are the shadow candidate track artifacts current and aligned with the same as_of_date?",
+        "If generated, are the shadow candidate track artifacts current and aligned with the same as_of_date?",
         "Is there any operational mismatch between the monthly summary, live pool, and release manifest?",
         "Before the next monthly cycle, what operator follow-up items should be tracked explicitly?",
     ]
 
 
 def build_review_payload(inputs: dict[str, Any]) -> dict[str, Any]:
-    summary = inputs["summary"]
+    summary = inputs["summary"] or {}
+    release_status_summary = inputs["release_status_summary"] or {}
     live_pool = inputs["live_pool"]
     manifest = inputs["manifest"]
     track_rows = inputs["track_rows"]
@@ -133,18 +183,21 @@ def build_review_payload(inputs: dict[str, Any]) -> dict[str, Any]:
 
     warnings = derive_warnings(inputs)
     official_baseline = summary.get("official_baseline", {})
+    release_official = release_status_summary.get("official_release", {})
+    shadow_available = bool(track_rows)
+    as_of_date = resolve_as_of_date(summary, release_status_summary, live_pool)
 
     return {
         "generated_at_utc": datetime.now(timezone.utc).isoformat(),
-        "as_of_date": str(summary.get("as_of_date", live_pool.get("as_of_date", ""))).strip(),
+        "as_of_date": as_of_date,
         "status": "warning" if warnings else "ok",
         "official_baseline": {
             "profile": str(official_baseline.get("profile", official_track.get("profile_name", "baseline_blended_rank"))),
-            "version": str(official_baseline.get("version", live_pool.get("version", ""))),
-            "mode": str(official_baseline.get("mode", live_pool.get("mode", ""))),
-            "pool_size": _safe_int(official_baseline.get("pool_size", live_pool.get("pool_size", 0))),
-            "symbols": list(live_pool.get("symbols", [])),
-            "source_project": str(live_pool.get("source_project", "")),
+            "version": str(official_baseline.get("version", release_official.get("version", live_pool.get("version", "")))),
+            "mode": str(official_baseline.get("mode", release_official.get("mode", live_pool.get("mode", "")))),
+            "pool_size": _safe_int(official_baseline.get("pool_size", release_official.get("pool_size", live_pool.get("pool_size", 0)))),
+            "symbols": list(release_official.get("symbols", live_pool.get("symbols", []))),
+            "source_project": str(release_official.get("source_project", live_pool.get("source_project", ""))),
         },
         "publish": {
             "dry_run": bool(manifest.get("dry_run")),
@@ -156,6 +209,7 @@ def build_review_payload(inputs: dict[str, Any]) -> dict[str, Any]:
         },
         "tracks": {
             "official_baseline": {
+                "available": bool(official_track),
                 "release_count": _safe_int(official_track.get("release_count", 0)),
                 "first_as_of_date": str(official_track.get("first_as_of_date", "")),
                 "last_as_of_date": str(official_track.get("last_as_of_date", "")),
@@ -163,6 +217,7 @@ def build_review_payload(inputs: dict[str, Any]) -> dict[str, Any]:
                 "release_index_path": str(official_track.get("release_index_path", "")),
             },
             "challenger_topk_60": {
+                "available": bool(challenger_track),
                 "release_count": _safe_int(challenger_track.get("release_count", 0)),
                 "first_as_of_date": str(challenger_track.get("first_as_of_date", "")),
                 "last_as_of_date": str(challenger_track.get("last_as_of_date", "")),
@@ -170,10 +225,11 @@ def build_review_payload(inputs: dict[str, Any]) -> dict[str, Any]:
                 "release_index_path": str(challenger_track.get("release_index_path", "")),
             },
         },
+        "shadow_analysis_available": shadow_available,
         "warnings": warnings,
         "operator_checklist": [
-            "Run `make monthly-shadow-build` before generating the review package.",
-            "Confirm `live_pool.json`, `release_manifest.json`, and `track_summary.csv` all point to the same month.",
+            "Run `make monthly-shadow-build` before generating the extended shadow review package.",
+            "Confirm `live_pool.json` and `release_manifest.json` point to the same month; if generated, confirm `track_summary.csv` matches too.",
             "Review warning lines before any manual publish or communication follow-up.",
             "Keep the official baseline as the only production reference unless a separate governance process approves a change.",
         ],
@@ -186,6 +242,18 @@ def render_review_markdown(payload: dict[str, Any]) -> str:
     official = payload["official_baseline"]
     publish = payload["publish"]
     tracks = payload["tracks"]
+    official_track_line = (
+        f"releases={tracks['official_baseline']['release_count']} first={tracks['official_baseline']['first_as_of_date']} "
+        f"last={tracks['official_baseline']['last_as_of_date']} status={tracks['official_baseline']['candidate_status']}"
+        if tracks["official_baseline"]["available"]
+        else "not generated in this run"
+    )
+    challenger_track_line = (
+        f"releases={tracks['challenger_topk_60']['release_count']} first={tracks['challenger_topk_60']['first_as_of_date']} "
+        f"last={tracks['challenger_topk_60']['last_as_of_date']} status={tracks['challenger_topk_60']['candidate_status']}"
+        if tracks["challenger_topk_60"]["available"]
+        else "not generated in this run"
+    )
     warning_lines = "\n".join(f"- {item}" for item in payload["warnings"]) if payload["warnings"] else "- none"
     checklist_lines = "\n".join(f"{idx}. {item}" for idx, item in enumerate(payload["operator_checklist"], start=1))
     symbols = ", ".join(official["symbols"]) if official["symbols"] else "n/a"
@@ -214,8 +282,8 @@ Generated: {payload['generated_at_utc']}
 
 ## Track coverage
 
-- official_baseline: releases={tracks['official_baseline']['release_count']} first={tracks['official_baseline']['first_as_of_date']} last={tracks['official_baseline']['last_as_of_date']} status={tracks['official_baseline']['candidate_status']}
-- challenger_topk_60: releases={tracks['challenger_topk_60']['release_count']} first={tracks['challenger_topk_60']['first_as_of_date']} last={tracks['challenger_topk_60']['last_as_of_date']} status={tracks['challenger_topk_60']['candidate_status']}
+- official_baseline: {official_track_line}
+- challenger_topk_60: {challenger_track_line}
 
 ## Warnings
 
@@ -235,7 +303,7 @@ def render_review_prompt(payload: dict[str, Any]) -> str:
 Context:
 - This package is reporting-only.
 - official_baseline remains the production reference.
-- challenger_topk_60 remains a shadow candidate artifact.
+- challenger_topk_60 remains a shadow candidate artifact when generated.
 - No automatic switch or publish decision should be inferred from this file alone.
 
 Current month:

@@ -260,6 +260,16 @@ Generate the canonical monthly release-status summary from the current official 
 
 This summary is the upstream publish-status view for operators. It validates the current artifact set, records release metadata, and produces `release_status_summary.json` / `release_status_summary.md` without changing any release state.
 
+Assemble the standard monthly report bundle:
+
+```bash
+.venv/bin/python scripts/run_monthly_review_briefing.py
+.venv/bin/python scripts/run_monthly_build_telegram.py --print-only --output-path data/output/monthly_telegram.txt
+.venv/bin/python scripts/run_monthly_report_bundle.py
+```
+
+The bundle is written under `data/output/monthly_report_bundle/` and is designed to be uploaded as one GitHub Actions artifact.
+
 Fixture-driven CLI smoke for `build_live_pool.py`:
 
 ```bash
@@ -823,8 +833,25 @@ The monthly chain is intentionally lightweight:
 
 1. update/download Binance Spot history
 2. build the production `core_major` live outputs
-3. publish those files to GCS
-4. write a lightweight Firestore summary document
+3. publish those files to GCS / Firestore
+4. generate `release_status_summary.json` / `.md`
+5. generate `monthly_review.json` / `.md` / `monthly_review_prompt.md`
+6. render `monthly_telegram.txt`
+7. assemble `data/output/monthly_report_bundle/`
+8. upload the bundle as a GitHub Actions artifact
+9. write a lightweight logs-branch heartbeat
+
+Standard bundle contents:
+
+- `release_status_summary.json`
+- `release_status_summary.md`
+- `monthly_review.json`
+- `monthly_review.md`
+- `monthly_review_prompt.md`
+- `monthly_telegram.txt`
+- `monthly_report_bundle.json`
+- `job_summary.md`
+- `ai_review_input.md`
 
 The publish script reads these local artifacts:
 
@@ -919,6 +946,27 @@ Manual GitHub Actions trigger:
 
 - open the `Monthly Publish` workflow
 - run `workflow_dispatch`
+
+Monthly report bundle retrieval:
+
+1. open the completed `Monthly Publish` workflow run
+2. read the run summary for the quick operator view
+3. download the `monthly-report-<as_of_date>` artifact from the run
+
+Practical review file selection:
+
+- quickest human check: the Actions run summary or `job_summary.md`
+- operator release summary: `release_status_summary.md`
+- extended monthly review: `monthly_review.md`
+- best single file to send to AI for review: `ai_review_input.md`
+- optional follow-up checklist for AI: `monthly_review_prompt.md`
+
+Recommended AI handoff:
+
+1. download the artifact from the workflow run
+2. open `ai_review_input.md`
+3. if you want extra prompting structure, include `monthly_review_prompt.md`
+4. ask the AI to review release consistency, pool changes, warnings, and operator follow-up items
 
 Rollback plan:
 

@@ -1,0 +1,63 @@
+from __future__ import annotations
+
+import importlib.util
+import json
+import tempfile
+import unittest
+from pathlib import Path
+
+
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+SCRIPT_PATH = PROJECT_ROOT / "scripts" / "run_monthly_report_bundle.py"
+SPEC = importlib.util.spec_from_file_location("monthly_report_bundle", SCRIPT_PATH)
+MODULE = importlib.util.module_from_spec(SPEC)
+assert SPEC is not None and SPEC.loader is not None
+SPEC.loader.exec_module(MODULE)
+
+
+class MonthlyReportBundleTests(unittest.TestCase):
+    def write_fixture_files(self, root: Path) -> Path:
+        output_dir = root / "data" / "output"
+        output_dir.mkdir(parents=True, exist_ok=True)
+
+        (output_dir / "release_status_summary.json").write_text(
+            json.dumps(
+                {
+                    "official_release": {
+                        "as_of_date": "2026-03-13",
+                        "version": "2026-03-13-core_major",
+                        "mode": "core_major",
+                        "pool_size": 5,
+                        "symbols": ["TRXUSDT", "ETHUSDT", "BCHUSDT", "NEARUSDT", "SOLUSDT"],
+                    },
+                    "validation": {"errors": [], "warnings": []},
+                }
+            ),
+            encoding="utf-8",
+        )
+        (output_dir / "release_status_summary.md").write_text("# Release Status Summary\n", encoding="utf-8")
+        (output_dir / "monthly_review.json").write_text(
+            json.dumps({"as_of_date": "2026-03-13", "warnings": [], "status": "ok"}),
+            encoding="utf-8",
+        )
+        (output_dir / "monthly_review.md").write_text("# Monthly Review\n", encoding="utf-8")
+        (output_dir / "monthly_review_prompt.md").write_text("Monthly release review prompt\n", encoding="utf-8")
+        (output_dir / "monthly_telegram.txt").write_text("CryptoLeaderRotation monthly release\n", encoding="utf-8")
+        return output_dir
+
+    def test_write_bundle_copies_files_and_writes_manifest(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            output_dir = self.write_fixture_files(Path(tmp_dir))
+            bundle_dir = output_dir / "monthly_report_bundle"
+            outputs = MODULE.write_bundle(output_dir, bundle_dir)
+            manifest = json.loads(outputs["manifest"].read_text(encoding="utf-8"))
+            self.assertEqual(manifest["artifact_name"], "monthly-report-2026-03-13")
+            self.assertEqual(manifest["report_month"], "2026-03")
+            self.assertEqual(manifest["pool_size"], 5)
+            self.assertIn("monthly_telegram.txt", manifest["artifact_files"])
+            self.assertTrue((bundle_dir / "ai_review_input.md").exists())
+            self.assertTrue((bundle_dir / "job_summary.md").exists())
+
+
+if __name__ == "__main__":
+    unittest.main()
