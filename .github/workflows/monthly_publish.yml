@@ -86,6 +86,7 @@ jobs:
           name: ${{ steps.monthly-report.outputs.artifact_name }}
           path: data/output/monthly_report_bundle
           if-no-files-found: error
+          retention-days: 7
 
       - name: Write Release Heartbeat
         if: success() && env.PUBLISH_ENABLED != 'false'
