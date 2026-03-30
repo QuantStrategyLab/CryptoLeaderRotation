@@ -5,7 +5,7 @@ from typing import Any, Optional
 
 import pandas as pd
 
-from .backtest import build_walkforward_windows, run_backtest_suite, run_walkforward_scoring
+from .backtest import run_backtest_suite, run_walkforward_scoring
 from .evaluation import evaluate_leader_selection, leader_metrics_to_frame
 from .external_data import load_optional_market_cap_metadata, merge_histories_with_external
 from .export import export_latest_ranking, export_latest_universe, export_live_pool
@@ -384,7 +384,7 @@ def build_live_pool_outputs(
 
     output_dir = config["paths"].output_dir
     export_latest_universe(panel, output_dir, latest_date)
-    ranking_snapshot = export_latest_ranking(panel, output_dir, latest_date)
+    export_latest_ranking(panel, output_dir, latest_date)
     latest_snapshot = latest_ranking_snapshot(panel, latest_date)
     live_payload = export_live_pool(
         ranking_snapshot=latest_snapshot.loc[latest_snapshot["selected_flag"] | latest_snapshot["in_universe"]],

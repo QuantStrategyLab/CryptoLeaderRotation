@@ -251,7 +251,7 @@ def main() -> None:
 
         scored_external = run_variant_scoring(profile_cfg)
         evaluation_start = max(scored_binance["first_scored_date"], scored_external["first_scored_date"])
-        result = evaluate_variant(profile, profile_cfg, scored_external, evaluation_start)
+        evaluate_variant(profile, profile_cfg, scored_external, evaluation_start)
         summary_rows.append(
             load_profile_row(
                 profile,
