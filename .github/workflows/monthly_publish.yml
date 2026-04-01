@@ -15,6 +15,7 @@ jobs:
     permissions:
       contents: write
       id-token: write
+      issues: write
     env:
       PUBLISH_ENABLED: ${{ vars.PUBLISH_ENABLED || 'true' }}
       PUBLISH_MODE: ${{ vars.PUBLISH_MODE || 'core_major' }}
@@ -91,15 +92,69 @@ jobs:
       - name: Create Monthly Review Issue
         if: success() && env.PUBLISH_ENABLED != 'false'
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
         run: |
           set -euo pipefail
-          AS_OF_DATE=$(python -c "import json; print(json.load(open('data/output/monthly_report_bundle/monthly_report_bundle.json'))['as_of_date'])")
-          gh label create monthly-review --description "Automated monthly report AI review" --color "0E8A16" 2>/dev/null || true
-          gh issue create \
-            --title "Monthly Report Review: ${AS_OF_DATE}" \
-            --label "monthly-review" \
-            --body-file data/output/monthly_report_bundle/ai_review_input.md
+          python - <<'PY'
+          import json
+          import os
+          import urllib.error
+          import urllib.parse
+          import urllib.request
+          
+          token = os.environ["GITHUB_TOKEN"]
+          repository = os.environ["GITHUB_REPOSITORY"]
+          headers = {
+              "Authorization": f"Bearer {token}",
+              "Accept": "application/vnd.github+json",
+              "X-GitHub-Api-Version": "2022-11-28",
+              "User-Agent": "crypto-leader-rotation-monthly-publish",
+          }
+          api_base = f"https://api.github.com/repos/{repository}"
+          label_name = "monthly-review"
+          label_path = urllib.parse.quote(label_name, safe="")
+          
+          with open("data/output/monthly_report_bundle/monthly_report_bundle.json", "r", encoding="utf-8") as handle:
+              bundle = json.load(handle)
+          with open("data/output/monthly_report_bundle/ai_review_input.md", "r", encoding="utf-8") as handle:
+              issue_body = handle.read()
+          
+          def request_json(method: str, url: str, payload: dict | None = None) -> dict:
+              data = None
+              if payload is not None:
+                  data = json.dumps(payload).encode("utf-8")
+              request = urllib.request.Request(url, data=data, method=method, headers=headers)
+              with urllib.request.urlopen(request) as response:
+                  body = response.read().decode("utf-8")
+              return json.loads(body) if body else {}
+          
+          try:
+              request_json("GET", f"{api_base}/labels/{label_path}")
+          except urllib.error.HTTPError as exc:
+              if exc.code != 404:
+                  raise
+              request_json(
+                  "POST",
+                  f"{api_base}/labels",
+                  {
+                      "name": label_name,
+                      "description": "Automated monthly report AI review",
+                      "color": "0E8A16",
+                  },
+              )
+          
+          issue = request_json(
+              "POST",
+              f"{api_base}/issues",
+              {
+                  "title": f"Monthly Report Review: {bundle['as_of_date']}",
+                  "labels": [label_name],
+                  "body": issue_body,
+              },
+          )
+          print(f"Created issue #{issue['number']}: {issue['html_url']}")
+          PY
 
       - name: Write Release Heartbeat
         if: success() && env.PUBLISH_ENABLED != 'false'
