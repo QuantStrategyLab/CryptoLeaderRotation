@@ -27,30 +27,42 @@ jobs:
         uses: actions/checkout@v6
 
       - name: Download upstream AI review artifact
-        run: |
-          python3 scripts/download_ai_review_artifact.py \
-            --repo "${GITHUB_REPOSITORY}" \
-            --run-id "${{ inputs.upstream_run_id }}" \
-            --output-dir data/input/upstream \
-            --token-env GITHUB_TOKEN
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          mkdir -p data/input/upstream
+          gh run download "${{ inputs.upstream_run_id }}" \
+            --repo "${GITHUB_REPOSITORY}" \
+            --dir data/input/upstream
 
       - name: Download downstream AI review artifact
-        run: |
-          python3 scripts/download_ai_review_artifact.py \
-            --repo "${{ inputs.downstream_repo }}" \
-            --run-id "${{ inputs.downstream_run_id }}" \
-            --output-dir data/input/downstream \
-            --token-env CROSS_REPO_GITHUB_TOKEN
         env:
-          CROSS_REPO_GITHUB_TOKEN: ${{ secrets.CROSS_REPO_GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.CROSS_REPO_GITHUB_TOKEN }}
+        run: |
+          mkdir -p data/input/downstream
+          gh run download "${{ inputs.downstream_run_id }}" \
+            --repo "${{ inputs.downstream_repo }}" \
+            --dir data/input/downstream
+
+      - name: Resolve downloaded artifact paths
+        id: artifact_paths
+        run: |
+          UPSTREAM_DIR=$(find data/input/upstream -mindepth 1 -maxdepth 1 -type d | head -1)
+          DOWNSTREAM_DIR=$(find data/input/downstream -mindepth 1 -maxdepth 1 -type d | head -1)
+          if [ -z "${UPSTREAM_DIR}" ] || [ -z "${DOWNSTREAM_DIR}" ]; then
+            echo "Failed to resolve downloaded artifact directories" >&2
+            exit 1
+          fi
+          {
+            echo "upstream_dir=${UPSTREAM_DIR}"
+            echo "downstream_dir=${DOWNSTREAM_DIR}"
+          } >> "${GITHUB_OUTPUT}"
 
       - name: Build monthly optimization plan
         run: |
           python3 scripts/build_monthly_optimization_plan.py \
-            --upstream-review-file data/input/upstream/final_review_payload.json \
-            --downstream-review-file data/input/downstream/final_review_payload.json \
+            --upstream-review-file "${{ steps.artifact_paths.outputs.upstream_dir }}/final_review_payload.json" \
+            --downstream-review-file "${{ steps.artifact_paths.outputs.downstream_dir }}/final_review_payload.json" \
             --output-dir data/output/monthly_optimization
 
       - name: Append optimization summary
