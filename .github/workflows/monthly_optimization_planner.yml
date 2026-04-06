@@ -43,7 +43,7 @@ jobs:
       - name: Create GitHub App token for cross-repo access
         id: cross_repo_app_token
         if: steps.cross_repo_credentials.outputs.has_app_credentials == 'true'
-        uses: actions/create-github-app-token@v2
+        uses: actions/create-github-app-token@v3
         with:
           app-id: ${{ vars.CROSS_REPO_GITHUB_APP_ID }}
           private-key: ${{ secrets.CROSS_REPO_GITHUB_APP_PRIVATE_KEY }}
