@@ -162,6 +162,7 @@ class ReleaseStatusSummaryTests(unittest.TestCase):
                 max_age_days=45,
                 require_freshness=False,
                 ranking_preview_size=3,
+                reference_date="2026-04-01",
             )
             outputs = MODULE.write_outputs(payload, output_dir)
 
