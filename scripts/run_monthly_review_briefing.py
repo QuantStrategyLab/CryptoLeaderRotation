@@ -162,6 +162,22 @@ def derive_warnings(inputs: dict[str, Any]) -> list[str]:
     return warnings
 
 
+def require_shadow_outputs(inputs: dict[str, Any]) -> None:
+    availability = inputs["availability"]
+    missing_items: list[str] = []
+    if not availability["monthly_shadow_build_summary"]:
+        missing_items.append("monthly_shadow_build_summary.json")
+    if not availability["track_summary"]:
+        missing_items.append("shadow_candidate_tracks/track_summary.csv")
+
+    if missing_items:
+        missing_text = ", ".join(missing_items)
+        raise RuntimeError(
+            "monthly shadow build outputs are required before generating the monthly review package: "
+            f"{missing_text}"
+        )
+
+
 def build_review_questions() -> list[str]:
     return [
         "Does the official baseline publish chain look internally consistent for this month?",
@@ -342,6 +358,7 @@ def main() -> None:
     args = parse_args()
     output_dir = Path(args.output_dir).resolve()
     inputs = build_review_inputs(output_dir)
+    require_shadow_outputs(inputs)
     payload = build_review_payload(inputs)
     outputs = write_outputs(payload, output_dir)
 

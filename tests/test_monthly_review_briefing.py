@@ -116,16 +116,12 @@ class MonthlyReviewBriefingTests(unittest.TestCase):
         self.assertIn("## Warnings", review_md)
         self.assertIn("official_baseline remains the production reference", prompt_md)
 
-    def test_build_review_payload_allows_official_only_outputs(self) -> None:
+    def test_build_review_payload_requires_shadow_outputs(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
             output_dir = self.write_fixture_files(Path(tmp_dir), include_shadow_outputs=False)
             inputs = MODULE.build_review_inputs(output_dir)
-            payload = MODULE.build_review_payload(inputs)
-            review_md = MODULE.render_review_markdown(payload)
-
-        self.assertEqual(payload["status"], "ok")
-        self.assertFalse(payload["shadow_analysis_available"])
-        self.assertIn("not generated in this run", review_md)
+            with self.assertRaisesRegex(RuntimeError, "monthly shadow build outputs are required"):
+                MODULE.require_shadow_outputs(inputs)
 
 
 if __name__ == "__main__":
