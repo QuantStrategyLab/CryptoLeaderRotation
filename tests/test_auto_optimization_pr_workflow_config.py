@@ -69,6 +69,10 @@ class AutoOptimizationPrWorkflowConfigTests(unittest.TestCase):
         self.assertIn("codex/monthly-optimization-issue-", workflow)
         self.assertIn("auto-optimization-pr:issue-", workflow)
         self.assertIn("gh issue comment", workflow)
+        self.assertIn('MAX_CODEX_FEEDBACK_ROUNDS: "3"', workflow)
+        self.assertIn("gh issue edit", workflow)
+        self.assertIn("--remove-label codex-bridge", workflow)
+        self.assertIn("Codex PR Retry Limit Reached", workflow)
         self.assertIn("Codex PR CI Feedback", workflow)
         self.assertIn("Codex PR Review Feedback", workflow)
 

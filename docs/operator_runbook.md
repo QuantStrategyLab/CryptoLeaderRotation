@@ -80,7 +80,7 @@ The monthly optimization planner may create repo-scoped follow-up issues after A
 
 Codex remediation PRs must use branch `codex/monthly-optimization-issue-<issue-number>`, include `<!-- auto-optimization-pr:issue-<issue-number> -->` in the PR body, and start as draft. The auto-merge workflow only merges after CI passes, the PR is ready for review, `auto-merge-ok` is present, task-level auto-merge eligibility is recorded, and changed files stay outside guarded selector/config paths.
 
-If CI fails on a Codex remediation PR, or a reviewer requests changes, `Codex PR Feedback` comments the failure or review summary back to the source `codex-bridge` issue. The issue update lets the VPS bridge dispatch Codex again to fix the same PR branch.
+If CI fails on a Codex remediation PR, or a reviewer requests changes, `Codex PR Feedback` comments the failure or review summary back to the source `codex-bridge` issue. The issue update lets the VPS bridge dispatch Codex again to fix the same PR branch. The workflow permits up to three automatic feedback rounds, then removes `codex-bridge` and leaves the issue for human review.
 
 ## Standard Monthly Flow
 
