@@ -11,7 +11,7 @@ from typing import Any
 
 
 OPENAI_API_URL = "https://api.openai.com/v1/chat/completions"
-SUPPORTED_REVIEW_KINDS = {"upstream_selector", "execution_runtime"}
+SUPPORTED_REVIEW_KINDS = {"upstream_selector"}
 
 SECONDARY_REVIEW_SCHEMA: dict[str, Any] = {
     "type": "object",
@@ -43,7 +43,7 @@ SECONDARY_REVIEW_SCHEMA: dict[str, Any] = {
                     "title": {"type": "string"},
                     "owner_repo": {
                         "type": "string",
-                        "enum": ["CryptoSnapshotPipelines", "CryptoStrategies", "BinancePlatform"],
+                        "enum": ["CryptoSnapshotPipelines", "CryptoStrategies"],
                     },
                     "risk_level": {"type": "string", "enum": ["low", "medium", "high"]},
                     "auto_pr_safe": {"type": "boolean"},
@@ -93,15 +93,6 @@ def build_system_prompt(review_kind: str) -> str:
             "shadow/challenger evidence, and downstream BinancePlatform impact actually support the same conclusion. "
             "Use recommended_actions for concrete next steps, and only mark auto_pr_safe=true for low-risk "
             "changes like workflow, telemetry, report wording, tests, or challenger/shadow configuration."
-        )
-    if review_kind == "execution_runtime":
-        return (
-            "You are the independent secondary reviewer for BinancePlatform, a downstream Binance Spot execution "
-            "engine. Review the issue body and the Claude primary review, then return only valid JSON matching "
-            "the provided schema. Do not simply echo Claude. Re-check whether execution health, gating/no-trade "
-            "reasons, degraded mode, circuit breaker behavior, and cash-flow context support the same conclusion. "
-            "Use recommended_actions for concrete next steps, and only mark auto_pr_safe=true for low-risk "
-            "changes like workflow, telemetry, report wording, tests, or diagnostics."
         )
     raise ValueError(f"Unsupported review kind: {review_kind}")
 

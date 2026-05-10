@@ -6,7 +6,7 @@ from scripts.build_monthly_optimization_plan import build_plan, render_summary_m
 
 
 class BuildMonthlyOptimizationPlanTests(unittest.TestCase):
-    def test_build_plan_groups_actions_by_owner_repo(self) -> None:
+    def test_build_plan_groups_in_scope_actions_by_owner_repo(self) -> None:
         upstream_review = {
             "source_repo": "QuantStrategyLab/CryptoSnapshotPipelines",
             "review_kind": "upstream_selector",
@@ -25,34 +25,15 @@ class BuildMonthlyOptimizationPlanTests(unittest.TestCase):
                 }
             ],
         }
-        downstream_review = {
-            "source_repo": "QuantStrategyLab/BinancePlatform",
-            "review_kind": "execution_runtime",
-            "source_issue": {"number": 9, "title": "Monthly Execution Review: 2026-03", "url": "https://github.com/a/b/issues/9"},
-            "risk_level": "low",
-            "production_recommendation": "keep_production_as_is",
-            "summary": "Execution looked healthy.",
-            "recommended_actions": [
-                {
-                    "owner_repo": "BinancePlatform",
-                    "title": "Keep gating summary visible",
-                    "risk_level": "low",
-                    "auto_pr_safe": True,
-                    "experiment_only": False,
-                    "summary": "No change to production behavior.",
-                }
-            ],
-        }
 
-        plan = build_plan(upstream_review, downstream_review)
+        plan = build_plan(upstream_review)
 
         self.assertEqual(plan["highest_review_risk"], "medium")
         self.assertIn("CryptoSnapshotPipelines", plan["repo_action_summary"])
-        self.assertIn("BinancePlatform", plan["repo_action_summary"])
-        self.assertEqual(len(plan["safe_auto_pr_candidates"]), 2)
+        self.assertEqual(len(plan["safe_auto_pr_candidates"]), 1)
         self.assertEqual(len(plan["experiment_candidates"]), 1)
 
-    def test_build_plan_reassigns_reporting_tasks_and_downgrades_manual_checks(self) -> None:
+    def test_build_plan_keeps_downstream_actions_out_of_scope(self) -> None:
         upstream_review = {
             "source_repo": "QuantStrategyLab/CryptoSnapshotPipelines",
             "review_kind": "upstream_selector",
@@ -60,44 +41,31 @@ class BuildMonthlyOptimizationPlanTests(unittest.TestCase):
             "risk_level": "low",
             "production_recommendation": "keep_production_as_is",
             "summary": "Upstream is stable.",
-            "recommended_actions": [],
-        }
-        downstream_review = {
-            "source_repo": "QuantStrategyLab/BinancePlatform",
-            "review_kind": "execution_runtime",
-            "source_issue": {"number": 9, "title": "Monthly Execution Review: 2026-03", "url": "https://github.com/a/b/issues/9"},
-            "risk_level": "medium",
-            "production_recommendation": "needs_attention",
-            "summary": "Execution needs follow-up.",
             "recommended_actions": [
                 {
                     "owner_repo": "CryptoStrategies",
-                    "title": "Add monthly report cash-flow attribution",
+                    "title": "Add selector report note",
                     "risk_level": "low",
                     "auto_pr_safe": True,
                     "experiment_only": False,
-                    "summary": "Extend the monthly report to show deposits, withdrawals, realized PnL, and unrealized PnL separately.",
+                    "summary": "Document upstream selector evidence.",
                 },
                 {
                     "owner_repo": "BinancePlatform",
-                    "title": "Check DCA and rotation eligibility gates against current free USDT",
+                    "title": "Check DCA and rotation eligibility gates",
                     "risk_level": "low",
                     "auto_pr_safe": True,
                     "experiment_only": False,
-                    "summary": "Verify minimum order size, reserve floor, and available balance thresholds.",
+                    "summary": "Downstream runtime follow-up should not be fanout from this planner.",
                 },
             ],
         }
 
-        plan = build_plan(upstream_review, downstream_review)
+        plan = build_plan(upstream_review)
 
-        bp_actions = plan["repo_action_summary"]["BinancePlatform"]["actions"]
-        self.assertEqual([action["title"] for action in bp_actions], [
-            "Check DCA and rotation eligibility gates against current free USDT",
-            "Add monthly report cash-flow attribution",
-        ])
-        self.assertEqual(bp_actions[0]["auto_pr_safe"], False)
-        self.assertEqual(bp_actions[1]["auto_pr_safe"], True)
+        self.assertNotIn("BinancePlatform", plan["repo_action_summary"])
+        self.assertIn("CryptoStrategies", plan["repo_action_summary"])
+        self.assertEqual(plan["out_of_scope_actions"][0]["owner_repo"], "BinancePlatform")
         self.assertEqual(len(plan["safe_auto_pr_candidates"]), 1)
 
     def test_render_summary_markdown_mentions_source_reviews_and_repos(self) -> None:
@@ -140,6 +108,40 @@ class BuildMonthlyOptimizationPlanTests(unittest.TestCase):
         self.assertIn("QuantStrategyLab/CryptoSnapshotPipelines", markdown)
         self.assertIn("Add challenger breadth check", markdown)
         self.assertIn("Operator Focus", markdown)
+
+    def test_render_summary_mentions_out_of_scope_actions(self) -> None:
+        plan = {
+            "highest_review_risk": "low",
+            "safe_auto_pr_candidates": [],
+            "experiment_candidates": [],
+            "human_review_required": [],
+            "source_reviews": [
+                {
+                    "source_repo": "QuantStrategyLab/CryptoSnapshotPipelines",
+                    "risk_level": "low",
+                    "production_recommendation": "keep_production_as_is",
+                    "summary": "Stable.",
+                    "source_issue": {"title": "Monthly Report Review: 2026-04-01", "url": "https://github.com/a/b/issues/11"},
+                    "run_url": "https://github.com/a/b/actions/runs/1",
+                }
+            ],
+            "repo_action_summary": {},
+            "operator_focus": [],
+            "out_of_scope_actions": [
+                {
+                    "risk_level": "low",
+                    "owner_repo": "BinancePlatform",
+                    "title": "Check downstream gates",
+                    "source_repo": "QuantStrategyLab/CryptoSnapshotPipelines",
+                    "source_issue_number": 11,
+                }
+            ],
+        }
+
+        markdown = render_summary_markdown(plan)
+
+        self.assertIn("Out-of-Scope Actions", markdown)
+        self.assertIn("BinancePlatform", markdown)
 
 
 if __name__ == "__main__":

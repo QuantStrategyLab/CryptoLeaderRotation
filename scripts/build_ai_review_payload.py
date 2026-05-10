@@ -9,7 +9,6 @@ from typing import Any
 SCHEMA_VERSION = "2026-04-02"
 REPO_ROLE_BY_KIND = {
     "upstream_selector": "upstream_selector_review",
-    "execution_runtime": "execution_runtime_review",
 }
 
 

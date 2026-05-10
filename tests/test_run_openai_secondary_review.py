@@ -7,6 +7,7 @@ from scripts.run_openai_secondary_review import (
     build_request_payload,
     build_system_prompt,
     extract_completion_content,
+    SECONDARY_REVIEW_SCHEMA,
 )
 
 
@@ -31,6 +32,13 @@ class RunOpenAiSecondaryReviewTests(unittest.TestCase):
         self.assertEqual(payload["response_format"]["type"], "json_schema")
         self.assertTrue(payload["response_format"]["json_schema"]["strict"])
         self.assertIn("messages", payload)
+
+    def test_recommended_actions_are_limited_to_strategy_repos(self) -> None:
+        owner_repo_schema = (
+            SECONDARY_REVIEW_SCHEMA["properties"]["recommended_actions"]["items"]["properties"]["owner_repo"]
+        )
+
+        self.assertEqual(owner_repo_schema["enum"], ["CryptoSnapshotPipelines", "CryptoStrategies"])
 
     def test_extract_completion_content_reads_first_choice_message(self) -> None:
         response_payload = {

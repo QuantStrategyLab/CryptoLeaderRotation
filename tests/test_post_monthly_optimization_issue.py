@@ -10,12 +10,11 @@ class PostMonthlyOptimizationIssueTests(unittest.TestCase):
         plan = {
             "source_reviews": [
                 {"source_repo": "QuantStrategyLab/CryptoSnapshotPipelines", "source_issue": {"number": 11, "title": "Monthly Report Review: 2026-04-01"}},
-                {"source_repo": "QuantStrategyLab/BinancePlatform", "source_issue": {"number": 9, "title": "Monthly Execution Review: 2026-03"}},
             ]
         }
 
-        self.assertEqual(build_marker(plan), "<!-- monthly-optimization-plan:QuantStrategyLab/CryptoSnapshotPipelines#11|QuantStrategyLab/BinancePlatform#9 -->")
-        self.assertEqual(build_issue_title(plan), "Monthly Optimization Plan: 2026-04-01 / 2026-03")
+        self.assertEqual(build_marker(plan), "<!-- monthly-optimization-plan:QuantStrategyLab/CryptoSnapshotPipelines#11 -->")
+        self.assertEqual(build_issue_title(plan), "Monthly Optimization Plan: 2026-04-01")
 
     def test_build_issue_body_prefixes_marker(self) -> None:
         plan = {
