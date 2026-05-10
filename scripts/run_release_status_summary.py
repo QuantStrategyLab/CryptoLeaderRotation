@@ -80,6 +80,7 @@ def build_release_status_payload(
     max_age_days: int = 45,
     require_freshness: bool = True,
     ranking_preview_size: int = 5,
+    reference_date: Any = None,
 ) -> dict[str, Any]:
     root = Path(output_dir)
     universe = load_json(root / "latest_universe.json")
@@ -94,6 +95,7 @@ def build_release_status_payload(
         expected_source_project=live_pool.get("source_project"),
         expected_pool_size=live_pool.get("pool_size"),
         max_age_days=max_age_days,
+        reference_date=reference_date,
         require_manifest=True,
         require_artifact_manifest=True,
         require_freshness=require_freshness,

@@ -525,7 +525,7 @@ Outputs:
 
 Behavior:
 
-- uses only upstream monthly build outputs
+- requires upstream monthly build outputs, including the same-cycle shadow build summary and shadow candidate track summary
 - summarizes official baseline release status, publish manifest status, and shadow track coverage
 - emits warnings when monthly artifacts do not align on `as_of_date`, `version`, or `mode`
 - produces a structured review prompt/checklist for manual follow-up
@@ -541,18 +541,20 @@ The AI review covers:
 - **Anomaly detection**: flags unexpected warnings, stale artifacts, validation failures, or suspicious ranking scores
 - **Downstream impact**: notes implications for BinancePlatform (the downstream execution engine), including pool changes and degradation risk
 - **Operator action items**: summarizes the checklist and adds any AI-identified follow-up items
-- **Code improvements**: if concrete, low-risk improvements are found, Claude may open a Pull Request (never auto-merged)
+- **Code improvements**: structured review output can feed the monthly optimization planner; low-risk `auto-pr-safe` tasks may become automation PRs, while sensitive selector changes remain manual-review work
 
 All analysis is posted in both English and Chinese.
 
 ### Required GitHub Secret
 
 - `ANTHROPIC_API_KEY`: Anthropic API key for Claude Code Action
+- `OPENAI_API_KEY`: OpenAI API key for the secondary monthly review
 
 Setup:
 
 ```bash
 gh secret set ANTHROPIC_API_KEY --body "sk-ant-..."
+gh secret set OPENAI_API_KEY --body "sk-..."
 ```
 
 The AI review workflow runs on `ubuntu-latest` (no self-hosted runner required) and costs approximately $0.01-0.05 per monthly run.

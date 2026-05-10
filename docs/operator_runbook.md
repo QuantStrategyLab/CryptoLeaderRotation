@@ -62,7 +62,7 @@ This repository owns the monthly reporting and publish-status summary layer for 
 Operator-facing summary entrypoints:
 
 - `scripts/run_release_status_summary.py` for the canonical release-status summary built from the current official artifacts
-- `scripts/run_monthly_review_briefing.py` for the monthly review package; it can run on official release artifacts alone and adds shadow coverage when available
+- `scripts/run_monthly_review_briefing.py` for the monthly review package; it requires same-cycle shadow outputs so review evidence always includes official and challenger coverage
 - `scripts/run_monthly_build_telegram.py` for the optional short Telegram health notification or local preview text
 - `scripts/run_monthly_report_bundle.py` for the standard monthly report bundle used by Actions artifacts and AI review handoff
 - `scripts/write_release_heartbeat.py` for the lightweight logs-branch heartbeat record
@@ -105,6 +105,11 @@ Boundary rules:
 ```bash
 .venv/bin/python scripts/run_release_status_summary.py
 ```
+
+Before the review package is generated, confirm the monthly shadow build has produced both
+`data/output/monthly_shadow_build_summary.json` and
+`data/output/shadow_candidate_tracks/track_summary.csv`. The hosted monthly publish
+workflow runs this shadow build automatically before the review step.
 
 6. Generate the monthly review package:
 
