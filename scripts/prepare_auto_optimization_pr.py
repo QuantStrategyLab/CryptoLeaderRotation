@@ -48,26 +48,6 @@ AUTO_MERGE_BLOCK_TERMS = {
         "walk-forward",
         "walk forward",
     ),
-    "BinancePlatform": (
-        "dca",
-        "rotation",
-        "eligibility gate",
-        "free usdt",
-        "cash flow",
-        "withdrawal",
-        "deposit",
-        "open position",
-        "execution",
-        "live trading",
-        "threshold",
-        "circuit breaker",
-        "capital threshold",
-        "allocation",
-        "sizing",
-        "liquidity",
-        "spread",
-        "adv",
-    ),
     "CryptoStrategies": (
         "strategy",
         "signal",
@@ -84,22 +64,6 @@ SENSITIVE_PATH_PATTERNS = {
     "CryptoSnapshotPipelines": (
         r"^src/",
         r"^config/",
-    ),
-    "BinancePlatform": (
-        r"^application/",
-        r"^infra/",
-        r"^strategy/",
-        r"^entrypoints/",
-        r"^main\.py$",
-        r"^runtime_support\.py$",
-        r"^live_services\.py$",
-        r"^degraded_mode_support\.py$",
-        r"^market_snapshot_support\.py$",
-        r"^trade_state_support\.py$",
-        r"^trend_pool_support\.py$",
-        r"^strategy_core\.py$",
-        r"^strategy_loader\.py$",
-        r"^strategy_registry\.py$",
     ),
     "CryptoStrategies": (
         r"^src/",
@@ -181,17 +145,6 @@ def _is_completed_low_risk_task(action: dict[str, Any], repo_root: Path) -> bool
                 "Monthly ranking tie-break rule for `core_major` live exports:" in readme
                 and "deterministic tie-break" in runbook
             )
-
-    if repo_name == "BinancePlatform" and (
-        "zero-trade diagnostics" in title
-        or "diagnostic reporting for no-trade months" in title
-        or "no-trade months" in title
-    ):
-        monthly_report = _read_text(repo_root / "scripts" / "run_monthly_report_bundle.py")
-        return (
-            "## Zero-Trade Diagnostics" in monthly_report
-            and "by_category_and_gate" in monthly_report
-        )
 
     return False
 

@@ -6,13 +6,6 @@ name: Monthly Optimization Planner
       upstream_run_id:
         description: "AI review run id from CryptoSnapshotPipelines"
         required: true
-      downstream_run_id:
-        description: "AI review run id from BinancePlatform"
-        required: true
-      downstream_repo:
-        description: "Downstream execution repo"
-        required: true
-        default: "QuantStrategyLab/BinancePlatform"
 
 jobs:
   planner:
@@ -50,7 +43,6 @@ jobs:
           owner: ${{ github.repository_owner }}
           repositories: |
             CryptoSnapshotPipelines
-            BinancePlatform
             CryptoStrategies
           permission-actions: write
           permission-issues: write
@@ -81,27 +73,16 @@ jobs:
             --repo "${GITHUB_REPOSITORY}" \
             --dir data/input/upstream
 
-      - name: Download downstream AI review artifact
-        env:
-          GH_TOKEN: ${{ steps.cross_repo_token.outputs.token }}
-        run: |
-          mkdir -p data/input/downstream
-          gh run download "${{ inputs.downstream_run_id }}" \
-            --repo "${{ inputs.downstream_repo }}" \
-            --dir data/input/downstream
-
       - name: Resolve downloaded artifact paths
         id: artifact_paths
         run: |
           UPSTREAM_DIR=$(find data/input/upstream -mindepth 1 -maxdepth 1 -type d | head -1)
-          DOWNSTREAM_DIR=$(find data/input/downstream -mindepth 1 -maxdepth 1 -type d | head -1)
-          if [ -z "${UPSTREAM_DIR}" ] || [ -z "${DOWNSTREAM_DIR}" ]; then
-            echo "Failed to resolve downloaded artifact directories" >&2
+          if [ -z "${UPSTREAM_DIR}" ]; then
+            echo "Failed to resolve downloaded upstream artifact directory" >&2
             exit 1
           fi
           {
             echo "upstream_dir=${UPSTREAM_DIR}"
-            echo "downstream_dir=${DOWNSTREAM_DIR}"
           } >> "${GITHUB_OUTPUT}"
 
       - name: Prepare upstream review payload
@@ -114,21 +95,10 @@ jobs:
             --run-url "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${{ inputs.upstream_run_id }}" \
             --output-file data/output/prepared/upstream_review_payload.json
 
-      - name: Prepare downstream review payload
-        run: |
-          python3 scripts/build_ai_review_payload.py \
-            --source-repo "${{ inputs.downstream_repo }}" \
-            --review-kind execution_runtime \
-            --issue-context-file "${{ steps.artifact_paths.outputs.downstream_dir }}/issue_context.json" \
-            --secondary-review-file "${{ steps.artifact_paths.outputs.downstream_dir }}/secondary_review.json" \
-            --run-url "${GITHUB_SERVER_URL}/${{ inputs.downstream_repo }}/actions/runs/${{ inputs.downstream_run_id }}" \
-            --output-file data/output/prepared/downstream_review_payload.json
-
       - name: Build monthly optimization plan
         run: |
           python3 scripts/build_monthly_optimization_plan.py \
             --upstream-review-file data/output/prepared/upstream_review_payload.json \
-            --downstream-review-file data/output/prepared/downstream_review_payload.json \
             --output-dir data/output/monthly_optimization
 
       - name: Append optimization summary
@@ -170,18 +140,6 @@ jobs:
             --repo "QuantStrategyLab/CryptoStrategies" \
             --planner-issue-url "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/issues/${{ steps.optimization_issue.outputs.issue_number }}" \
             --output-file data/output/monthly_optimization/fanout/crypto_strategies.json \
-            --allow-permission-skip
-        env:
-          GITHUB_TOKEN: ${{ steps.cross_repo_token.outputs.token }}
-
-      - name: Fan out BinancePlatform task issue
-        run: |
-          python3 scripts/fanout_monthly_optimization_tasks.py \
-            --plan-file data/output/monthly_optimization/optimization_plan.json \
-            --owner-repo BinancePlatform \
-            --repo "${{ inputs.downstream_repo }}" \
-            --planner-issue-url "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/issues/${{ steps.optimization_issue.outputs.issue_number }}" \
-            --output-file data/output/monthly_optimization/fanout/binance_platform.json \
             --allow-permission-skip
         env:
           GITHUB_TOKEN: ${{ steps.cross_repo_token.outputs.token }}
@@ -235,63 +193,8 @@ jobs:
           gh workflow run experiment_validation.yml \
             -f issue_number="${{ steps.upstream_experiment_target.outputs.issue_number }}"
 
-      - name: Resolve downstream experiment validation target
-        id: downstream_experiment_target
-        run: |
-          python3 - <<'PY'
-          import json
-          import os
-          from pathlib import Path
-
-          fanout = json.loads(
-              Path("data/output/monthly_optimization/fanout/binance_platform.json").read_text(encoding="utf-8")
-          )
-          plan = json.loads(
-              Path("data/output/monthly_optimization/optimization_plan.json").read_text(encoding="utf-8")
-          )
-          actions = plan.get("repo_action_summary", {}).get("BinancePlatform", {}).get("actions", [])
-          should_dispatch = bool(fanout.get("issue_number")) and fanout.get("status") in {"created", "updated"} and any(
-              action.get("experiment_only") for action in actions
-          )
-          with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as output:
-              print(f"should_dispatch={'true' if should_dispatch else 'false'}", file=output)
-              print(f"issue_number={fanout.get('issue_number') or ''}", file=output)
-          PY
-
-      - name: Best-effort label BinancePlatform issue for experiment validation
-        if: steps.downstream_experiment_target.outputs.should_dispatch == 'true'
-        env:
-          GH_TOKEN: ${{ steps.cross_repo_token.outputs.token }}
-          TARGET_REPO: ${{ inputs.downstream_repo }}
-          ISSUE_NUMBER: ${{ steps.downstream_experiment_target.outputs.issue_number }}
-        run: |
-          set +e
-          gh label create experiment-validation             --repo "$TARGET_REPO"             --color 1D76DB             --description "Trigger experiment validation for monthly optimization tasks"             --force
-          label_status=$?
-          gh issue edit "$ISSUE_NUMBER"             --repo "$TARGET_REPO"             --add-label experiment-validation
-          issue_status=$?
-          set -e
-          if [ "$label_status" -ne 0 ] || [ "$issue_status" -ne 0 ]; then
-            echo "Downstream experiment-validation label update skipped for $TARGET_REPO#$ISSUE_NUMBER." >> "$GITHUB_STEP_SUMMARY"
-          fi
-
-      - name: Dispatch BinancePlatform experiment validation
-        if: steps.downstream_experiment_target.outputs.should_dispatch == 'true'
-        env:
-          GH_TOKEN: ${{ steps.cross_repo_token.outputs.token }}
-        run: |
-          set +e
-          gh workflow run experiment_validation.yml \
-            -R "${{ inputs.downstream_repo }}" \
-            -f issue_number="${{ steps.downstream_experiment_target.outputs.issue_number }}"
-          status=$?
-          set -e
-          if [ "$status" -ne 0 ]; then
-            echo "Downstream experiment validation dispatch skipped: ${{ steps.cross_repo_token.outputs.source }} token likely needs Actions write on ${{ inputs.downstream_repo }}." >> "$GITHUB_STEP_SUMMARY"
-          fi
-
       - name: Upload planner artifact
         uses: actions/upload-artifact@v7
         with:
-          name: monthly-optimization-plan-${{ inputs.upstream_run_id }}-${{ inputs.downstream_run_id }}
+          name: monthly-optimization-plan-${{ inputs.upstream_run_id }}
           path: data/output/monthly_optimization/

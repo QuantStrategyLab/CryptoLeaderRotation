@@ -19,33 +19,29 @@ class FanoutMonthlyOptimizationTasksTests(unittest.TestCase):
                     "source_repo": "QuantStrategyLab/CryptoSnapshotPipelines",
                     "source_issue": {"number": 11, "title": "Monthly Report Review: 2026-04-01"},
                 },
-                {
-                    "source_repo": "QuantStrategyLab/BinancePlatform",
-                    "source_issue": {"number": 9, "title": "Monthly Execution Review: 2026-03"},
-                },
             ],
             "repo_action_summary": {
-                "BinancePlatform": {
+                "CryptoStrategies": {
                     "count": 2,
                     "highest_risk_level": "high",
                     "actions": [
                         {
                             "risk_level": "high",
-                            "title": "Reconcile March cash flows",
-                            "summary": "Separate withdrawals from mark-to-market moves.",
-                            "source_repo": "QuantStrategyLab/BinancePlatform",
-                            "source_issue_number": 9,
-                            "source_issue_url": "https://github.com/QuantStrategyLab/BinancePlatform/issues/9",
+                            "title": "Review selector allocation contract",
+                            "summary": "Keep shared strategy semantics aligned with the upstream monthly pool.",
+                            "source_repo": "QuantStrategyLab/CryptoSnapshotPipelines",
+                            "source_issue_number": 11,
+                            "source_issue_url": "https://github.com/QuantStrategyLab/CryptoSnapshotPipelines/issues/11",
                             "auto_pr_safe": False,
                             "experiment_only": False,
                         },
                         {
                             "risk_level": "low",
-                            "title": "Add zero-trade diagnostics",
-                            "summary": "Keep gating reasons visible in the report.",
-                            "source_repo": "QuantStrategyLab/BinancePlatform",
-                            "source_issue_number": 9,
-                            "source_issue_url": "https://github.com/QuantStrategyLab/BinancePlatform/issues/9",
+                            "title": "Add strategy contract diagnostics",
+                            "summary": "Keep selector/runtime contract assumptions visible in tests.",
+                            "source_repo": "QuantStrategyLab/CryptoSnapshotPipelines",
+                            "source_issue_number": 11,
+                            "source_issue_url": "https://github.com/QuantStrategyLab/CryptoSnapshotPipelines/issues/11",
                             "auto_pr_safe": True,
                             "experiment_only": False,
                         },
@@ -56,28 +52,28 @@ class FanoutMonthlyOptimizationTasksTests(unittest.TestCase):
 
     def test_build_marker_and_title_include_owner_repo(self) -> None:
         self.assertEqual(
-            build_marker(self.plan, "BinancePlatform"),
-            "<!-- monthly-optimization-task:BinancePlatform:QuantStrategyLab/CryptoSnapshotPipelines#11|QuantStrategyLab/BinancePlatform#9 -->",
+            build_marker(self.plan, "CryptoStrategies"),
+            "<!-- monthly-optimization-task:CryptoStrategies:QuantStrategyLab/CryptoSnapshotPipelines#11 -->",
         )
         self.assertEqual(
-            build_issue_title(self.plan, "BinancePlatform"),
-            "Monthly Optimization Tasks · BinancePlatform: 2026-04-01 / 2026-03",
+            build_issue_title(self.plan, "CryptoStrategies"),
+            "Monthly Optimization Tasks · CryptoStrategies: 2026-04-01",
         )
 
     def test_build_issue_body_lists_repo_specific_actions_and_flags(self) -> None:
         body = build_issue_body(
             self.plan,
-            "BinancePlatform",
+            "CryptoStrategies",
             planner_issue_url="https://github.com/QuantStrategyLab/CryptoSnapshotPipelines/issues/20",
         )
 
-        self.assertIn("# Monthly Optimization Tasks · BinancePlatform", body)
+        self.assertIn("# Monthly Optimization Tasks · CryptoStrategies", body)
         self.assertIn("Planner issue: https://github.com/QuantStrategyLab/CryptoSnapshotPipelines/issues/20", body)
         self.assertIn("Actions in this repo: `2`", body)
         self.assertIn("Highest repo risk: `high`", body)
-        self.assertIn("Reconcile March cash flows", body)
-        self.assertIn("Add zero-trade diagnostics [auto-pr-safe]", body)
-        self.assertIn("Source: [QuantStrategyLab/BinancePlatform #9]", body)
+        self.assertIn("Review selector allocation contract", body)
+        self.assertIn("Add strategy contract diagnostics [auto-pr-safe]", body)
+        self.assertIn("Source: [QuantStrategyLab/CryptoSnapshotPipelines #11]", body)
 
     def test_build_closed_issue_body_marks_repo_as_resolved(self) -> None:
         body = build_closed_issue_body(
