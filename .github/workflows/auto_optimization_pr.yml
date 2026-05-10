@@ -11,7 +11,7 @@ name: Auto Optimization Draft PR
 
 jobs:
   auto-pr:
-    if: contains(github.event.issue.labels.*.name, 'monthly-optimization-task') || inputs.issue_number != ''
+    if: inputs.issue_number != '' || (github.event_name == 'issues' && contains(github.event.issue.labels.*.name, 'monthly-optimization-task') && !contains(github.event.issue.labels.*.name, 'codex-bridge'))
     runs-on: ubuntu-latest
     permissions:
       actions: write
@@ -36,7 +36,7 @@ jobs:
           mkdir -p data/output/auto_optimization
           if [ -z "${ANTHROPIC_API_KEY}" ]; then
             echo "has_anthropic_key=false" >> "$GITHUB_OUTPUT"
-            echo "Claude automation skipped: ANTHROPIC_API_KEY is not configured for this repo." > data/output/auto_optimization/skip_reason.txt
+            echo "Legacy Claude automation skipped: ANTHROPIC_API_KEY is not configured for this repo." > data/output/auto_optimization/skip_reason.txt
           else
             echo "has_anthropic_key=true" >> "$GITHUB_OUTPUT"
           fi

@@ -7,6 +7,7 @@ from scripts.fanout_monthly_optimization_tasks import (
     build_issue_body,
     build_issue_title,
     build_marker,
+    issue_labels_for_actions,
 )
 
 
@@ -88,6 +89,41 @@ class FanoutMonthlyOptimizationTasksTests(unittest.TestCase):
         self.assertIn("<!-- monthly-optimization-task:CryptoStrategies:", body)
         self.assertIn("No repo-scoped tasks remain", body)
         self.assertIn("This issue is being closed", body)
+
+    def test_crypto_snapshot_low_risk_tasks_are_queued_for_codex_bridge(self) -> None:
+        crypto_plan = {
+            **self.plan,
+            "repo_action_summary": {
+                "CryptoSnapshotPipelines": {
+                    "count": 1,
+                    "highest_risk_level": "low",
+                    "actions": [
+                        {
+                            "risk_level": "low",
+                            "title": "Improve monthly review diagnostics",
+                            "summary": "Keep release warnings visible in the report.",
+                            "source_repo": "QuantStrategyLab/CryptoSnapshotPipelines",
+                            "source_issue_number": 11,
+                            "source_issue_url": "https://github.com/QuantStrategyLab/CryptoSnapshotPipelines/issues/11",
+                            "auto_pr_safe": True,
+                            "experiment_only": False,
+                        }
+                    ],
+                }
+            },
+        }
+
+        actions = crypto_plan["repo_action_summary"]["CryptoSnapshotPipelines"]["actions"]
+        body = build_issue_body(crypto_plan, "CryptoSnapshotPipelines")
+
+        self.assertEqual(
+            issue_labels_for_actions(actions, "CryptoSnapshotPipelines"),
+            ["monthly-optimization-task", "codex-bridge", "auto-merge-ok"],
+        )
+        self.assertIn("## Codex Bridge Contract", body)
+        self.assertIn("self-hosted VPS ccbot/Codex", body)
+        self.assertIn("codex/monthly-optimization-issue-<issue-number>", body)
+        self.assertIn("<!-- auto-optimization-pr:issue-<issue-number> -->", body)
 
 
 if __name__ == "__main__":

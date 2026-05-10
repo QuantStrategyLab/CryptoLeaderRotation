@@ -108,6 +108,7 @@ SENSITIVE_PATH_PATTERNS = {
 
 REPO_NAME_ALIASES = {
     "CryptoLeaderRotation": "CryptoSnapshotPipelines",
+    "crypto-codex-bridge": "CryptoSnapshotPipelines",
 }
 
 
