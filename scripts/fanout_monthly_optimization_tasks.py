@@ -16,6 +16,12 @@ DEFAULT_API_URL = "https://api.github.com"
 LABEL_NAME = "monthly-optimization-task"
 LABEL_COLOR = "5319E7"
 LABEL_DESCRIPTION = "Automated repo-scoped monthly optimization tasks"
+CODEX_LABEL_NAME = "codex-bridge"
+CODEX_LABEL_COLOR = "0E8A16"
+CODEX_LABEL_DESCRIPTION = "Queue this issue for the self-hosted ccbot Codex runner"
+AUTO_MERGE_LABEL_NAME = "auto-merge-ok"
+AUTO_MERGE_LABEL_COLOR = "0E8A16"
+AUTO_MERGE_LABEL_DESCRIPTION = "Eligible for guarded automation merge after checks pass"
 RISK_ORDER = {"low": 0, "medium": 1, "high": 2}
 
 
@@ -44,6 +50,24 @@ def _repo_actions(plan: dict[str, Any], owner_repo: str) -> list[dict[str, Any]]
     return list(repo_summary.get("actions", []))
 
 
+def _has_codex_bridge_actions(actions: list[dict[str, Any]], owner_repo: str) -> bool:
+    if owner_repo != "CryptoSnapshotPipelines":
+        return False
+    return any(
+        action.get("risk_level") == "low"
+        and action.get("auto_pr_safe")
+        and not action.get("experiment_only")
+        for action in actions
+    )
+
+
+def issue_labels_for_actions(actions: list[dict[str, Any]], owner_repo: str) -> list[str]:
+    labels = [LABEL_NAME]
+    if _has_codex_bridge_actions(actions, owner_repo):
+        labels.extend([CODEX_LABEL_NAME, AUTO_MERGE_LABEL_NAME])
+    return labels
+
+
 def build_issue_body(plan: dict[str, Any], owner_repo: str, planner_issue_url: str | None = None) -> str:
     actions = _repo_actions(plan, owner_repo)
     repo_summary = plan.get("repo_action_summary", {}).get(owner_repo, {})
@@ -60,6 +84,23 @@ def build_issue_body(plan: dict[str, Any], owner_repo: str, planner_issue_url: s
     ]
     if planner_issue_url:
         lines.append(f"- Planner issue: {planner_issue_url}")
+
+    if _has_codex_bridge_actions(actions, owner_repo):
+        lines.extend(
+            [
+                "",
+                "## Codex Bridge Contract",
+                "",
+                f"- Queue label: `{CODEX_LABEL_NAME}`",
+                "- Runner: self-hosted VPS ccbot/Codex, not GitHub-hosted Claude Action.",
+                "- Implement only `low` actions explicitly marked `[auto-pr-safe]` and not `[experiment-only]`.",
+                "- Keep edits minimal and limited to docs, report wording, validation, workflow plumbing, instrumentation, and tests.",
+                "- Do not change production selector logic, ranking behavior, `src/`, or `config/` from this issue alone.",
+                "- Open a draft PR first from branch `codex/monthly-optimization-issue-<issue-number>`.",
+                "- Include `<!-- auto-optimization-pr:issue-<issue-number> -->` in the PR body.",
+                "- Mark the PR ready and apply `auto-merge-ok` only after targeted tests pass and changed files stay inside the guardrails.",
+            ]
+        )
 
     lines.extend(["", "## Actions"])
     for action in actions:
@@ -111,8 +152,8 @@ def github_request(method: str, url: str, token: str, payload: dict[str, Any] | 
         return json.loads(raw) if raw else None
 
 
-def ensure_label(api_url: str, repo: str, token: str) -> None:
-    label_path = urllib.parse.quote(LABEL_NAME, safe="")
+def ensure_label(api_url: str, repo: str, token: str, *, name: str, color: str, description: str) -> None:
+    label_path = urllib.parse.quote(name, safe="")
     label_url = f"{api_url}/repos/{repo}/labels/{label_path}"
     try:
         github_request("GET", label_url, token)
@@ -124,17 +165,28 @@ def ensure_label(api_url: str, repo: str, token: str) -> None:
             f"{api_url}/repos/{repo}/labels",
             token,
             {
-                "name": LABEL_NAME,
-                "color": LABEL_COLOR,
-                "description": LABEL_DESCRIPTION,
+                "name": name,
+                "color": color,
+                "description": description,
             },
         )
 
 
-def upsert_issue(*, api_url: str, repo: str, token: str, title: str, body: str) -> tuple[str, int, str]:
+def ensure_labels(api_url: str, repo: str, token: str, labels: list[str]) -> None:
+    specs = {
+        LABEL_NAME: (LABEL_COLOR, LABEL_DESCRIPTION),
+        CODEX_LABEL_NAME: (CODEX_LABEL_COLOR, CODEX_LABEL_DESCRIPTION),
+        AUTO_MERGE_LABEL_NAME: (AUTO_MERGE_LABEL_COLOR, AUTO_MERGE_LABEL_DESCRIPTION),
+    }
+    for label in labels:
+        color, description = specs[label]
+        ensure_label(api_url, repo, token, name=label, color=color, description=description)
+
+
+def upsert_issue(*, api_url: str, repo: str, token: str, title: str, body: str, labels: list[str]) -> tuple[str, int, str]:
     marker = build_marker_from_body(body)
     existing = find_existing_issue(api_url=api_url, repo=repo, token=token, marker=marker)
-    payload = {"title": title, "body": body, "labels": [LABEL_NAME]}
+    payload = {"title": title, "body": body, "labels": labels}
     if existing:
         github_request("PATCH", f"{api_url}/repos/{repo}/issues/{existing['number']}", token, payload)
         return "updated", int(existing["number"]), str(existing["html_url"])
@@ -264,15 +316,17 @@ def main() -> int:
 
     title = build_issue_title(plan, args.owner_repo)
     body = build_issue_body(plan, args.owner_repo, planner_issue_url=args.planner_issue_url)
+    labels = issue_labels_for_actions(actions, args.owner_repo)
 
     try:
-        ensure_label(args.api_url.rstrip("/"), args.repo, token)
+        ensure_labels(args.api_url.rstrip("/"), args.repo, token, labels)
         status, issue_number, issue_url = upsert_issue(
             api_url=args.api_url.rstrip("/"),
             repo=args.repo,
             token=token,
             title=title,
             body=body,
+            labels=labels,
         )
         result = build_result(
             owner_repo=args.owner_repo,

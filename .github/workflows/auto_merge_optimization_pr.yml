@@ -7,7 +7,7 @@ name: Auto Merge Optimization PR
 
 jobs:
   auto-merge:
-    if: github.event.workflow_run.conclusion == 'success' && startsWith(github.event.workflow_run.head_branch, 'automation/monthly-optimization-issue-')
+    if: github.event.workflow_run.conclusion == 'success' && (startsWith(github.event.workflow_run.head_branch, 'automation/monthly-optimization-issue-') || startsWith(github.event.workflow_run.head_branch, 'codex/monthly-optimization-issue-'))
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -36,8 +36,9 @@ jobs:
         if: steps.pr.outputs.pr_number != ''
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          BRANCH_NAME: ${{ github.event.workflow_run.head_branch }}
         run: |
-          gh pr view "${{ steps.pr.outputs.pr_number }}" --json number,isDraft,body,url,files > data/output/auto_merge/pr.json
+          gh pr view "${{ steps.pr.outputs.pr_number }}" --json number,isDraft,body,url,files,labels > data/output/auto_merge/pr.json
           python3 - <<'PY'
           import json
           import os
@@ -48,10 +49,20 @@ jobs:
           pr = json.loads(Path("data/output/auto_merge/pr.json").read_text(encoding="utf-8"))
           body = pr.get("body") or ""
           changed_files = [item.get("path", "") for item in pr.get("files", [])]
+          labels = {item.get("name", "") for item in pr.get("labels", [])}
+          branch_name = os.environ["BRANCH_NAME"]
+          codex_branch = branch_name.startswith("codex/monthly-optimization-issue-")
           guard = evaluate_changed_files(changed_files)
           has_marker = "<!-- auto-optimization-pr:issue-" in body
           task_level_allowed = "Task-level auto-merge eligible: `yes`" in body
-          should_merge = has_marker and task_level_allowed and not pr.get("isDraft") and guard["allowed"]
+          has_auto_merge_label = "auto-merge-ok" in labels
+          should_merge = (
+              has_marker
+              and task_level_allowed
+              and not pr.get("isDraft")
+              and guard["allowed"]
+              and (not codex_branch or has_auto_merge_label)
+          )
           if not has_marker:
               reason = "missing_marker"
           elif not task_level_allowed:
@@ -60,14 +71,19 @@ jobs:
               reason = "draft_pr"
           elif not guard["allowed"]:
               reason = "sensitive_changed_files"
+          elif codex_branch and not has_auto_merge_label:
+              reason = "missing_auto_merge_label"
           else:
               reason = "ready"
 
           summary_lines = [
               "## Auto-Merge Gate",
               f"- PR: {pr['url']}",
+              f"- Branch: `{branch_name}`",
+              f"- Codex branch: `{ 'yes' if codex_branch else 'no' }`",
               f"- Draft: `{ 'yes' if pr.get('isDraft') else 'no' }`",
               f"- Task-level auto-merge eligible: `{ 'yes' if task_level_allowed else 'no' }`",
+              f"- Auto-merge label: `{ 'yes' if has_auto_merge_label else 'no' }`",
               f"- Sensitive files touched: `{len(guard['blocked_files'])}`",
               f"- Final merge decision: `{ 'merge' if should_merge else 'skip' }`",
               f"- Reason: `{reason}`",

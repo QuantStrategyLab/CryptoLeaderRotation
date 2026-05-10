@@ -541,7 +541,7 @@ The AI review covers:
 - **Anomaly detection**: flags unexpected warnings, stale artifacts, validation failures, or suspicious ranking scores
 - **Downstream impact**: notes implications for BinancePlatform (the downstream execution engine), including pool changes and degradation risk
 - **Operator action items**: summarizes the checklist and adds any AI-identified follow-up items
-- **Code improvements**: structured review output can feed the monthly optimization planner; low-risk `auto-pr-safe` tasks may become automation PRs, while sensitive selector changes remain manual-review work
+- **Code improvements**: structured review output feeds the monthly optimization planner; concrete low-risk `auto-pr-safe` tasks for `CryptoSnapshotPipelines` are queued to the self-hosted ccbot/Codex runner with `codex-bridge`, while sensitive selector changes remain manual-review work
 
 All analysis is posted in both English and Chinese.
 
@@ -557,7 +557,17 @@ gh secret set ANTHROPIC_API_KEY --body "sk-ant-..."
 gh secret set OPENAI_API_KEY --body "sk-..."
 ```
 
-The AI review workflow runs on `ubuntu-latest` (no self-hosted runner required) and costs approximately $0.01-0.05 per monthly run.
+The AI review workflow runs on `ubuntu-latest` (no self-hosted runner required) and costs approximately $0.01-0.05 per monthly run. Code remediation is a separate phase: repo-scoped low-risk tasks are created as GitHub issues, and safe `CryptoSnapshotPipelines` tasks are handed to the VPS ccbot/Codex bridge instead of GitHub-hosted Claude Action.
+
+### Codex Remediation and Auto-Merge Gate
+
+The monthly optimization planner creates repo-scoped issues for follow-up tasks. For this repository, low-risk non-experiment tasks marked `[auto-pr-safe]` are labeled with:
+
+- `monthly-optimization-task`
+- `codex-bridge`
+- `auto-merge-ok`
+
+The `codex-bridge` label is consumed by the self-hosted VPS ccbot/Codex runner. Codex should open a draft PR from `codex/monthly-optimization-issue-<issue-number>`, include `<!-- auto-optimization-pr:issue-<issue-number> -->` in the PR body, and mark the PR ready only after targeted tests pass. The post-CI `auto_merge_optimization_pr.yml` workflow can merge Codex PRs only when the PR is non-draft, carries `auto-merge-ok`, has the expected marker, reports task-level auto-merge eligibility, and touches no guarded selector/config paths.
 
 ## Dynamic Universe Logic
 

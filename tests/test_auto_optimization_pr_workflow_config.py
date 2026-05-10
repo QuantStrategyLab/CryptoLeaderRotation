@@ -16,6 +16,7 @@ class AutoOptimizationPrWorkflowConfigTests(unittest.TestCase):
 
         self.assertIn("issues:", workflow)
         self.assertIn("monthly-optimization-task", workflow)
+        self.assertIn("!contains(github.event.issue.labels.*.name, 'codex-bridge')", workflow)
         self.assertIn("workflow_dispatch:", workflow)
         self.assertIn("issue_number:", workflow)
         self.assertIn("actions: write", workflow)
@@ -46,9 +47,13 @@ class AutoOptimizationPrWorkflowConfigTests(unittest.TestCase):
         self.assertIn("workflow_run:", workflow)
         self.assertIn('workflows: ["CI"]', workflow)
         self.assertIn("automation/monthly-optimization-issue-", workflow)
+        self.assertIn("codex/monthly-optimization-issue-", workflow)
         self.assertIn("gh pr view", workflow)
+        self.assertIn("labels", workflow)
         self.assertIn("evaluate_changed_files", workflow)
         self.assertIn("Task-level auto-merge eligible: `yes`", workflow)
+        self.assertIn("auto-merge-ok", workflow)
+        self.assertIn("missing_auto_merge_label", workflow)
         self.assertIn("gh pr merge", workflow)
 
     def test_ci_workflow_supports_manual_dispatch(self) -> None:
