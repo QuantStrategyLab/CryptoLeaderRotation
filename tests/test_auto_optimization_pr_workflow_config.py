@@ -7,6 +7,7 @@ from pathlib import Path
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 AUTO_WORKFLOW = PROJECT_ROOT / ".github" / "workflows" / "auto_optimization_pr.yml"
 MERGE_WORKFLOW = PROJECT_ROOT / ".github" / "workflows" / "auto_merge_optimization_pr.yml"
+FEEDBACK_WORKFLOW = PROJECT_ROOT / ".github" / "workflows" / "codex_pr_feedback.yml"
 CI_WORKFLOW = PROJECT_ROOT / ".github" / "workflows" / "ci.yml"
 
 
@@ -59,6 +60,17 @@ class AutoOptimizationPrWorkflowConfigTests(unittest.TestCase):
     def test_ci_workflow_supports_manual_dispatch(self) -> None:
         workflow = CI_WORKFLOW.read_text(encoding="utf-8")
         self.assertIn("workflow_dispatch:", workflow)
+
+    def test_codex_feedback_workflow_requeues_failed_ci_and_review_feedback(self) -> None:
+        workflow = FEEDBACK_WORKFLOW.read_text(encoding="utf-8")
+
+        self.assertIn("workflow_run:", workflow)
+        self.assertIn("pull_request_review:", workflow)
+        self.assertIn("codex/monthly-optimization-issue-", workflow)
+        self.assertIn("auto-optimization-pr:issue-", workflow)
+        self.assertIn("gh issue comment", workflow)
+        self.assertIn("Codex PR CI Feedback", workflow)
+        self.assertIn("Codex PR Review Feedback", workflow)
 
 
 if __name__ == "__main__":
